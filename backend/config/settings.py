@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "attendance",
     "fees",
     "results",
+    "rest_framework_simplejwt.token_blacklist",
 ]
 
 MIDDLEWARE = [

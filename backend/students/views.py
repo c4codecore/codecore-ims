@@ -1,21 +1,25 @@
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from .sheet_sync import sync_students_from_sheet
 from .models import Student
 from .serializers import StudentSerializer
 
+
 @api_view(["POST"])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def sync_from_sheet(request):
     """Admin button dabayega toh sheet se sync hoga"""
     try:
         result = sync_students_from_sheet()
-        return Response({
-            "message": "Sync successful",
-            "created": result["created"],
-            "skipped": result["skipped"],
-        })
+        return Response(
+            {
+                "message": "Sync successful",
+                "created": result["created"],
+                "updated": result["updated"],  # ← skipped ki jagah updated
+                "skipped": result["skipped"],
+            }
+        )
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
