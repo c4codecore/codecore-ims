@@ -1,0 +1,42 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Django
+*.log
+db.sqlite3
+media/
+
+# Environment & Secrets
+.env
+codecore-sheets-key.json   ← Google key KABHI push mat karo!
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Secrets — KABHI PUSH MAT KARNA
+backend/.env
+backend/codecore-sheets-key.json
+
+# Django
+backend/db.sqlite3
+backend/media/
+
+# Node (frontend ke liye baad mein)
+frontend/node_modules/
+frontend/.env
+
+# OS
+.DS_Store
+Thumbs.db

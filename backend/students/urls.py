@@ -1,0 +1,8 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    path("sync/",         views.sync_from_sheet, name="sync-sheet"),
+    path("",              views.student_list,    name="student-list"),
+    path("<int:pk>/",     views.student_detail,  name="student-detail"),
+]
