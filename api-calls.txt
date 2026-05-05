@@ -1,0 +1,25 @@
+============================================
+CodeCore IMS — API Calls
+============================================
+
+--- AUTH ---
+
+# Login
+curl -X POST http://127.0.0.1:8000/api/auth/login/ -H "Content-Type: application/json" -d "{\"username\": \"nrjsrm\", \"password\": \"Asdf@1234\"}"
+
+# Me (token update karte rehna)
+curl http://127.0.0.1:8000/api/auth/me/ -H "Authorization: Bearer TOKEN_YAHAN"
+
+# Logout
+curl -X POST http://127.0.0.1:8000/api/auth/logout/ -H "Authorization: Bearer TOKEN_YAHAN" -H "Content-Type: application/json" -d "{\"refresh\": \"REFRESH_TOKEN_YAHAN\"}"
+
+--- STUDENTS ---
+
+# List
+curl http://127.0.0.1:8000/api/students/ -H "Authorization: Bearer TOKEN_YAHAN"
+
+# Detail
+curl http://127.0.0.1:8000/api/students/1/ -H "Authorization: Bearer TOKEN_YAHAN"
+
+# Sync
+curl -X POST http://127.0.0.1:8000/api/students/sync/
