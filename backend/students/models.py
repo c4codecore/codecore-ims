@@ -4,15 +4,23 @@ class Course(models.Model):
     FEE_TYPE_CHOICES = (
         ("monthly",     "Monthly"),
         ("quarterly",   "Quarterly"),
+        ("full",        "Full Payment"),
     )
-    name             = models.CharField(max_length=100)
-    duration_months  = models.PositiveIntegerField()
-    total_fee        = models.DecimalField(max_digits=10, decimal_places=2)
-    fee_type         = models.CharField(max_length=10, choices=FEE_TYPE_CHOICES, default="monthly")
+
+    name              = models.CharField(max_length=100)
+    short_name        = models.CharField(max_length=20, blank=True)  # DCA, ADCA, DAC
+    description       = models.TextField(blank=True)
+    duration_months   = models.PositiveIntegerField()
+    total_fee         = models.DecimalField(max_digits=10, decimal_places=2)
+    offer_fee         = models.DecimalField(max_digits=10, decimal_places=2, 
+                                            null=True, blank=True)  # discounted price
+    fee_type          = models.CharField(max_length=10, choices=FEE_TYPE_CHOICES, 
+                                         default="monthly")
+    is_active         = models.BooleanField(default=True)  # future me band kr skte ho
+    created_at        = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
-
 
 class Student(models.Model):
     GENDER_CHOICES = (

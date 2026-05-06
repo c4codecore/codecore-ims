@@ -5,4 +5,5 @@ urlpatterns = [
     path("sync/",         views.sync_from_sheet, name="sync-sheet"),
     path("",              views.student_list,    name="student-list"),
     path("<int:pk>/",     views.student_detail,  name="student-detail"),
+    path("stats/", views.dashboard_stats, name="dashboard-stats"),
 ]

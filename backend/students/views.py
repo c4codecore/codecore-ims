@@ -41,3 +41,17 @@ def student_detail(request, pk):
         return Response(serializer.data)
     except Student.DoesNotExist:
         return Response({"error": "Student not found"}, status=404)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def dashboard_stats(request):
+    from .models import Student, Course
+    
+    total_students = Student.objects.filter(status="active").count()
+    total_courses  = Course.objects.count()
+    
+    return Response({
+        "total_students": total_students,
+        "total_courses" : total_courses,
+    })

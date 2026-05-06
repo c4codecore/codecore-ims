@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import api from "@/api/axios";
 import {
   LayoutDashboard,
   Users,
@@ -11,7 +12,6 @@ import {
   GraduationCap,
   LogOut,
   Menu,
-  X,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -188,18 +188,37 @@ export default function Dashboard() {
 export function DashboardHome() {
   const { user } = useAuth();
 
-  const roleLabel =
-    user?.role === "admin"
-      ? "Administrator"
-      : user?.role === "teacher"
-      ? "Teacher"
-      : "Student";
+  const [stats, setStats]     = useState(null);   // { total_students, total_courses }
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState("");
 
-  const stats = [
-    { label: "Total Students", value: "78", icon: Users, color: "text-blue-500 bg-blue-500/10" },
-    { label: "Active Courses", value: "12", icon: ClipboardList, color: "text-emerald-500 bg-emerald-500/10" },
-    { label: "Attendance Today", value: "94%", icon: CalendarCheck, color: "text-violet-500 bg-violet-500/10" },
-    { label: "Pending Fees", value: "₹0", icon: Wallet, color: "text-amber-500 bg-amber-500/10" },
+  useEffect(() => {
+    api
+      .get("/api/students/stats/")
+      .then(({ data }) => setStats(data))
+      .catch(() => setError("Could not load stats. Check backend connection."))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const roleLabel =
+    user?.role === "admin"   ? "Administrator" :
+    user?.role === "teacher" ? "Teacher"        : "Student";
+
+  const cards = [
+    {
+      label : "Total Students",
+      value : stats?.total_students,
+      icon  : Users,
+      color : "text-blue-500 bg-blue-500/10",
+      suffix: "enrolled",
+    },
+    {
+      label : "Active Courses",
+      value : stats?.total_courses,
+      icon  : ClipboardList,
+      color : "text-emerald-500 bg-emerald-500/10",
+      suffix: "courses",
+    },
   ];
 
   return (
@@ -208,35 +227,51 @@ export function DashboardHome() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Logged in as <span className="font-medium text-foreground">{user?.username}</span>{" "}
+          Welcome back,{" "}
+          <span className="font-medium text-foreground">{user?.username}</span>{" "}
           &mdash; {roleLabel}
         </p>
       </div>
 
+      {/* Error banner */}
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {/* Stats grid */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {stats.map(({ label, value, icon: Icon, color }) => (
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {cards.map(({ label, value, icon: Icon, color, suffix }) => (
           <div
             key={label}
-            className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-sm transition-shadow hover:shadow-md"
+            className="flex items-center gap-4 rounded-xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
           >
-            <div className={cn("flex size-10 items-center justify-center rounded-lg", color)}>
-              <Icon className="size-5" />
+            <div className={cn("flex size-12 shrink-0 items-center justify-center rounded-xl", color)}>
+              <Icon className="size-6" />
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">{label}</p>
-              <p className="text-xl font-bold text-foreground">{value}</p>
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-muted-foreground">{label}</p>
+              {loading ? (
+                /* Skeleton pulse */
+                <div className="mt-1 h-7 w-16 animate-pulse rounded-md bg-muted" />
+              ) : (
+                <p className="text-2xl font-bold tracking-tight text-foreground">
+                  {value ?? "—"}
+                </p>
+              )}
+              <p className="mt-0.5 text-xs text-muted-foreground">{suffix}</p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Placeholder content area */}
+      {/* Quick-links / info card */}
       <div className="rounded-xl border border-border bg-card p-6 text-center shadow-sm">
-        <GraduationCap className="mx-auto mb-3 size-10 text-muted-foreground/40" />
-        <p className="text-sm font-medium text-foreground">Ready to go!</p>
+        <GraduationCap className="mx-auto mb-3 size-10 text-muted-foreground/30" />
+        <p className="text-sm font-medium text-foreground">More modules coming soon</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          Use the sidebar to navigate to Students, Fees, Attendance or Results.
+          Use the sidebar to navigate to Students, Fees, Attendance, or Results.
         </p>
       </div>
     </div>
