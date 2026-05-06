@@ -121,14 +121,16 @@ SIMPLE_JWT = {
 # CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "http://localhost:3000",
+    "http://localhost:5174", 
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",  
 ]
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME"  : timedelta(hours=24),      # access token 24 ghante
-    "REFRESH_TOKEN_LIFETIME" : timedelta(days=7),        # refresh token 7 din
-    "ROTATE_REFRESH_TOKENS"  : True,                     # har refresh pe naya token
-    "BLACKLIST_AFTER_ROTATION": True,                    # purana blacklist hoga
+    "ACCESS_TOKEN_LIFETIME"  : timedelta(hours=24),      
+    "REFRESH_TOKEN_LIFETIME" : timedelta(days=7),        
+    "ROTATE_REFRESH_TOKENS"  : True,                     
+    "BLACKLIST_AFTER_ROTATION": True,                   
     "AUTH_HEADER_TYPES"      : ("Bearer",),
     "USER_ID_FIELD"          : "id",
     "USER_ID_CLAIM"          : "user_id",
