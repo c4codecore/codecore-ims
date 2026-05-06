@@ -565,10 +565,185 @@ export default function StudentDetail() {
             <InfoRow icon={ShieldCheck} label="Sheet Row" value={student.sheet_row ? `Row ${student.sheet_row}` : null} />
             <InfoRow icon={MessageSquare} label="Comments" value={student.comments} />
           </div>
+        {/* ── Enrollments section ── */}
+          <div className="sm:col-span-2 rounded-xl border border-border bg-card p-5 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Enrollments
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => {
+                  setEnrollOpen(true);
+                  api.get("/api/students/courses/")
+                    .then(({ data }) => setEnrollCourses(Array.isArray(data) ? data : []))
+                    .catch(() => {});
+                }}
+              >
+                + New Enrollment
+              </Button>
+            </div>
+
+            {enrollLoading && (
+              <div className="flex justify-center py-6">
+                <div className="size-6 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+              </div>
+            )}
+
+            {enrollError && (
+              <p className="text-sm text-destructive">{enrollError}</p>
+            )}
+
+            {!enrollLoading && enrollments.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No enrollments yet.
+              </p>
+            )}
+
+            {!enrollLoading && enrollments.length > 0 && (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-muted-foreground">
+                    <th className="pb-2 text-left font-medium">Course</th>
+                    <th className="pb-2 text-left font-medium">Status</th>
+                    <th className="pb-2 text-left font-medium">Start Date</th>
+                    <th className="pb-2 text-left font-medium">End Date</th>
+                    <th className="pb-2 text-left font-medium">Fee</th>
+                    <th className="pb-2 text-left font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {enrollments.map((en) => (
+                    <tr key={en.id} className="border-b border-border last:border-0">
+                      <td className="py-2 font-medium">{en.course_name}</td>
+                      <td className="py-2">
+                        <Badge variant={STATUS_VARIANT[en.status] ?? "secondary"}>
+                          {en.status}
+                        </Badge>
+                      </td>
+                      <td className="py-2 text-muted-foreground">{en.start_date ?? "—"}</td>
+                      <td className="py-2 text-muted-foreground">{en.end_date ?? "—"}</td>
+                      <td className="py-2 text-muted-foreground">
+                        {en.fee_amount ? `₹${en.fee_amount}` : "—"}
+                      </td>
+                      <td className="py-2">
+                        <select
+                          value={en.status}
+                          onChange={async (e) => {
+                            try {
+                              await api.patch(`/api/students/enrollments/${en.id}/`, {
+                                status: e.target.value
+                              });
+                              fetchEnrollments();
+                              toast({ type: "success", title: "Enrollment updated!", duration: 3000 });
+                            } catch {
+                              toast({ type: "error", title: "Failed to update", duration: 3000 });
+                            }
+                          }}
+                          className="text-xs border border-border rounded px-2 py-1 bg-background"
+                        >
+                          <option value="active">Active</option>
+                          <option value="completed">Completed</option>
+                          <option value="dropped">Dropped</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
         </div>
       )}
 
-      {/* ── Edit Modal ──────────────────────────────────────────────────── */}
+      {/* ── New Enrollment Modal ─────────────────────────────────────── */}
+      <Dialog open={enrollOpen} onOpenChange={(v) => !v && setEnrollOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New Enrollment</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Course</label>
+              <Select
+                value={enrollForm.course}
+                onValueChange={(v) => {
+                  const selected = enrollCourses.find((c) => String(c.id) === v);
+                  setEnrollForm((p) => ({
+                    ...p,
+                    course: v,
+                    fee_amount: selected?.offer_fee ?? selected?.total_fee ?? "",
+                  }));
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select course…" /></SelectTrigger>
+                <SelectContent>
+                  {enrollCourses.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Start Date</label>
+              <Input
+                type="date"
+                value={enrollForm.start_date}
+                onChange={(e) => setEnrollForm((p) => ({ ...p, start_date: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Fee Amount (₹)</label>
+              <Input
+                type="number"
+                value={enrollForm.fee_amount}
+                onChange={(e) => setEnrollForm((p) => ({ ...p, fee_amount: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">Note (optional)</label>
+              <Input
+                value={enrollForm.note}
+                onChange={(e) => setEnrollForm((p) => ({ ...p, note: e.target.value }))}
+                placeholder="Any note…"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button variant="outline" size="sm" onClick={() => setEnrollOpen(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" onClick={async () => {
+              try {
+                await api.post(`/api/students/${id}/enrollments/`, {
+                  course    : Number(enrollForm.course),
+                  start_date: enrollForm.start_date,
+                  fee_amount: enrollForm.fee_amount || null,
+                  note      : enrollForm.note,
+                  status    : "active",
+                });
+                setEnrollOpen(false);
+                setEnrollForm({ course: "", start_date: todayISO(), end_date: "", fee_amount: "", note: "" });
+                fetchEnrollments();
+                toast({ type: "success", title: "Enrollment added!", duration: 3000 });
+              } catch (err) {
+                toast({ type: "error", title: "Failed to add enrollment", description: err.response?.data?.detail ?? "", duration: 4000 });
+              }
+            }}>
+              Add Enrollment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Modal ── */}
       <EditStudentModal
         student={student}
         open={editOpen}
@@ -577,5 +752,4 @@ export default function StudentDetail() {
       />
     </div>
   );
-  
 }
