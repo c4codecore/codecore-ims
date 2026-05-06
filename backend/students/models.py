@@ -67,3 +67,30 @@ class Student(models.Model):
 
     def __str__(self):
         return f"{self.name} — {self.course}"
+
+
+class Enrollment(models.Model):
+    STATUS_CHOICES = (
+        ("active",    "Active"),
+        ("completed", "Completed"),
+        ("dropped",   "Dropped"),
+    )
+
+    student     = models.ForeignKey(Student, on_delete=models.CASCADE,
+                                    related_name="enrollments")
+    course      = models.ForeignKey(Course, on_delete=models.SET_NULL,
+                                    null=True, related_name="enrollments")
+    status      = models.CharField(max_length=10, choices=STATUS_CHOICES,
+                                   default="active")
+    start_date  = models.DateField()
+    end_date    = models.DateField(null=True, blank=True)  # course complete hone ki date
+    fee_amount  = models.DecimalField(max_digits=8, decimal_places=2,
+                                      null=True, blank=True)  # custom fee
+    note        = models.TextField(blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-start_date"]
+
+    def __str__(self):
+        return f"{self.student.name} → {self.course.name} ({self.status})"

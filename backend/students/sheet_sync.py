@@ -4,6 +4,25 @@ from decouple import config
 from django.utils import timezone
 from .models import Student, Course
 
+# ── Course name mapping: Sheet value (uppercase key) → DB name ───────────────
+COURSE_MAPPING = {
+    "CERTIFICATE IN OFFICE AUTOMATION"                      : "Certificate in Office Automation",
+    "CERTIFICATE IN WEB DEVELOPMENT"                        : "Certificate in Web Development",
+    "CERTIFICATE IN WEB DESIGNING"                          : "Certificate in Web Designing",
+    "CERTIFICATE IN PROGRAMMING LANGUAGE"                   : "Certificate in Programming Language",
+    "CERTIFICATE IN DATA ANALYTICS"                         : "Certificate in Data Analytics",
+    "CERTIFICATE IN ADVANCED EXCEL + TALLY"                 : "Certificate in Advanced Excel + Tally",
+    "CERTIFICATE IN ADVANCED EXCEL"                         : "Certificate in Advanced Excel",
+    "CERTIFICATE IN ANALYZING DATA WITH MICROSOFT POWER BI" : "Certificate in Power BI",
+    "CERTIFICATE IN SOFTWARE TESTING"                       : "Certificate in Software Testing",
+    "DIPLOMA IN COMPUTER APPLICATION"                       : "Diploma in Computer Applications",
+    "ADVANCED DIPLOMA IN COMPUTER APPLICATION"              : "Advanced Diploma in Computer Applications",
+    "BASIC COMPUTER COURSE"                                 : "Basic Computer Course",
+    "TYPING COURSE"                                         : "Typing Course",
+    "OTHER"                                                 : "Other",
+    "Other"                                                 : "Other",
+}
+
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets.readonly",
     "https://www.googleapis.com/auth/drive.readonly",
@@ -69,9 +88,10 @@ def sync_students_from_sheet():
             skipped += 1
             continue
 
-        # Course match karo
-        course_name = clean(row.get("Course"))
-        course = Course.objects.filter(name__icontains=course_name).first()
+        # Course match via COURSE_MAPPING (case-insensitive key, then exact key fallback)
+        course_raw  = clean(row.get("Course")).strip()
+        mapped_name = COURSE_MAPPING.get(course_raw.upper(), COURSE_MAPPING.get(course_raw))
+        course      = Course.objects.filter(name=mapped_name).first() if mapped_name else None
 
         # update_or_create — naya bhi, purana bhi update hoga
         student, was_created = Student.objects.update_or_create(

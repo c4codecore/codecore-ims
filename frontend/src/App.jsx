@@ -6,6 +6,9 @@ import Login              from "@/pages/Login";
 import Dashboard, { DashboardHome } from "@/pages/Dashboard";
 import Students           from "@/pages/Students";
 import StudentDetail      from "@/pages/StudentDetail";
+import Fees               from "@/pages/Fees";
+import Attendance         from "@/pages/Attendance";
+import Courses            from "@/pages/Courses";
 
 // Placeholder for modules not yet built
 function ComingSoon({ page }) {
@@ -32,8 +35,9 @@ export default function App() {
                 <Route path="/dashboard"      element={<DashboardHome />} />
                 <Route path="/students"       element={<Students />} />
                 <Route path="/students/:id"   element={<StudentDetail />} />
-                <Route path="/fees"           element={<ComingSoon page="Fees" />} />
-                <Route path="/attendance"     element={<ComingSoon page="Attendance" />} />
+                <Route path="/fees"           element={<Fees />} />
+                <Route path="/attendance"     element={<Attendance />} />
+                <Route path="/courses"        element={<Courses />} />
                 <Route path="/results"        element={<ComingSoon page="Results" />} />
               </Route>
             </Route>

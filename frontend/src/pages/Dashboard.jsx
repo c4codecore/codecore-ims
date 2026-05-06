@@ -6,6 +6,7 @@ import api from "@/api/axios";
 import {
   LayoutDashboard,
   Users,
+  BookOpen,
   Wallet,
   CalendarCheck,
   ClipboardList,
@@ -17,11 +18,12 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
-  { to: "/dashboard",    label: "Dashboard",  icon: LayoutDashboard },
-  { to: "/students",     label: "Students",   icon: Users           },
-  { to: "/fees",         label: "Fees",       icon: Wallet          },
-  { to: "/attendance",   label: "Attendance", icon: CalendarCheck   },
-  { to: "/results",      label: "Results",    icon: ClipboardList   },
+  { to: "/dashboard",  label: "Dashboard",  icon: LayoutDashboard },
+  { to: "/students",   label: "Students",   icon: Users           },
+  { to: "/courses",    label: "Courses",    icon: BookOpen        },
+  { to: "/fees",       label: "Fees",       icon: Wallet          },
+  { to: "/attendance", label: "Attendance", icon: CalendarCheck   },
+  { to: "/results",    label: "Results",    icon: ClipboardList   },
 ];
 
 function SidebarLink({ to, label, Icon, onClick }) {
