@@ -22,4 +22,16 @@ class StudentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Student
-        fields = "__all__"
+        fields = "__all__"
+
+
+class EnrollmentSerializer(serializers.ModelSerializer):
+    course_name = serializers.CharField(source="course.name", read_only=True)
+
+    class Meta:
+        model  = Enrollment
+        fields = [
+            "id", "student", "course", "course_name",
+            "status", "start_date", "end_date",
+            "fee_amount", "note", "created_at"
+        ]

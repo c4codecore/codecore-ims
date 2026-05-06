@@ -8,9 +8,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input }  from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge }  from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/useToast";
 import {
   CalendarCheck,
@@ -51,28 +51,28 @@ const STATUSES = ["present", "absent", "leave"];
 
 const STATUS_CONFIG = {
   present: {
-    label:     "Present",
-    icon:      CheckCircle2,
-    active:    "bg-emerald-500/15 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/25 dark:text-emerald-400",
-    inactive:  "bg-background text-muted-foreground border-border hover:bg-muted",
-    badge:     "success",
-    dot:       "bg-emerald-500",
+    label: "Present",
+    icon: CheckCircle2,
+    active: "bg-emerald-500/15 text-emerald-600 border-emerald-500/40 hover:bg-emerald-500/25 dark:text-emerald-400",
+    inactive: "bg-background text-muted-foreground border-border hover:bg-muted",
+    badge: "success",
+    dot: "bg-emerald-500",
   },
   absent: {
-    label:     "Absent",
-    icon:      XCircle,
-    active:    "bg-rose-500/15 text-rose-600 border-rose-500/40 hover:bg-rose-500/25 dark:text-rose-400",
-    inactive:  "bg-background text-muted-foreground border-border hover:bg-muted",
-    badge:     "destructive",
-    dot:       "bg-rose-500",
+    label: "Absent",
+    icon: XCircle,
+    active: "bg-rose-500/15 text-rose-600 border-rose-500/40 hover:bg-rose-500/25 dark:text-rose-400",
+    inactive: "bg-background text-muted-foreground border-border hover:bg-muted",
+    badge: "destructive",
+    dot: "bg-rose-500",
   },
   leave: {
-    label:     "Leave",
-    icon:      Clock,
-    active:    "bg-amber-500/15 text-amber-600 border-amber-500/40 hover:bg-amber-500/25 dark:text-amber-400",
-    inactive:  "bg-background text-muted-foreground border-border hover:bg-muted",
-    badge:     "warning",
-    dot:       "bg-amber-500",
+    label: "Leave",
+    icon: Clock,
+    active: "bg-amber-500/15 text-amber-600 border-amber-500/40 hover:bg-amber-500/25 dark:text-amber-400",
+    inactive: "bg-background text-muted-foreground border-border hover:bg-muted",
+    badge: "warning",
+    dot: "bg-amber-500",
   },
 };
 
@@ -117,28 +117,22 @@ function SummaryPill({ status, count, total }) {
 export default function Attendance() {
   const { toast } = useToast();
 
-  const [date,       setDate]       = useState(todayISO());
-  const [students,   setStudents]   = useState([]);   // all active students
-  const [existing,   setExisting]   = useState([]);   // attendance records from API for this date
-  const [records,    setRecords]    = useState({});   // { [studentId]: { status, note } }
-  const [loading,    setLoading]    = useState(false);
-  const [saving,     setSaving]     = useState(false);
-  const [error,      setError]      = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [students, setStudents] = useState([]);   // all active students
+  const [existing, setExisting] = useState([]);   // attendance records from API for this date
+  const [records, setRecords] = useState({});   // { [studentId]: { status, note } }
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   // ── Fetch students + existing attendance for the chosen date ────────────────
   const fetchData = useCallback(async (selectedDate) => {
     setLoading(true);
     setError("");
     try {
-      const token =
-        localStorage.getItem("access_token") ||
-        localStorage.getItem("access")        ||
-        localStorage.getItem("token");
-      const headers = { Authorization: `Bearer ${token}` };
-
       const [studRes, attRes] = await Promise.all([
-        api.get("/api/students/",                    { headers }),
-        api.get(`/api/attendance/?date=${selectedDate}`, { headers }),
+        api.get("/api/students/", { params: { status: "active" } }),
+        api.get("/api/attendance/", { params: { date: selectedDate } }),
       ]);
 
       const studentList = Array.isArray(studRes.data)
@@ -158,7 +152,7 @@ export default function Attendance() {
         const found = attList.find((a) => a.student === s.id);
         map[s.id] = {
           status: found?.status ?? "absent",
-          note:   found?.note   ?? "",
+          note: found?.note ?? "",
         };
       });
       setRecords(map);
@@ -195,9 +189,9 @@ export default function Attendance() {
     const vals = Object.values(records);
     return {
       present: vals.filter((r) => r.status === "present").length,
-      absent:  vals.filter((r) => r.status === "absent").length,
-      leave:   vals.filter((r) => r.status === "leave").length,
-      total:   vals.length,
+      absent: vals.filter((r) => r.status === "absent").length,
+      leave: vals.filter((r) => r.status === "leave").length,
+      total: vals.length,
     };
   }, [records]);
 
@@ -211,18 +205,18 @@ export default function Attendance() {
         date,
         records: students.map((s) => ({
           student: s.id,
-          status:  records[s.id]?.status ?? "absent",
-          note:    records[s.id]?.note   ?? "",
+          status: records[s.id]?.status ?? "absent",
+          note: records[s.id]?.note ?? "",
         })),
       };
       const { data } = await api.post("/api/attendance/mark/", payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast({
-        type:        "success",
-        title:       "Attendance saved!",
+        type: "success",
+        title: "Attendance saved!",
         description: `${data.created ?? 0} created, ${data.updated ?? 0} updated for ${formatDisplayDate(date)}.`,
-        duration:    5000,
+        duration: 5000,
       });
       // Re-fetch to sync with backend
       await fetchData(date);
@@ -230,10 +224,10 @@ export default function Attendance() {
       console.error("[Attendance] save error:", err);
       console.error("[Attendance] response data:", err.response?.data);
       toast({
-        type:        "error",
-        title:       "Failed to save attendance",
+        type: "error",
+        title: "Failed to save attendance",
         description: err.response?.data?.detail ?? "Please try again.",
-        duration:    5000,
+        duration: 5000,
       });
     } finally {
       setSaving(false);
@@ -374,7 +368,7 @@ export default function Attendance() {
 
             <TableBody>
               {students.map((student, idx) => {
-                const rec    = records[student.id] ?? { status: "absent", note: "" };
+                const rec = records[student.id] ?? { status: "absent", note: "" };
                 const status = rec.status;
 
                 return (
@@ -383,8 +377,8 @@ export default function Attendance() {
                     className={cn(
                       "transition-colors",
                       status === "present" && "bg-emerald-500/5",
-                      status === "absent"  && "bg-rose-500/5",
-                      status === "leave"   && "bg-amber-500/5",
+                      status === "absent" && "bg-rose-500/5",
+                      status === "leave" && "bg-amber-500/5",
                     )}
                   >
                     {/* # */}
@@ -399,8 +393,8 @@ export default function Attendance() {
                           className={cn(
                             "flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold uppercase transition-colors",
                             status === "present" && "bg-emerald-500/15 text-emerald-600",
-                            status === "absent"  && "bg-rose-500/15 text-rose-600",
-                            status === "leave"   && "bg-amber-500/15 text-amber-600",
+                            status === "absent" && "bg-rose-500/15 text-rose-600",
+                            status === "leave" && "bg-amber-500/15 text-amber-600",
                           )}
                         >
                           {student.name?.[0] ?? "?"}

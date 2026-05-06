@@ -2,8 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import api from "@/api/axios";
 import { Button } from "@/components/ui/button";
-import { Badge }  from "@/components/ui/badge";
-import { Input }  from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -40,24 +40,32 @@ import { cn } from "@/lib/utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const STATUS_VARIANT = {
-  active:    "success",
+  active: "success",
   completed: "info",
-  dropped:   "destructive",
+  dropped: "destructive",
 };
 
 const STATUS_OPTIONS = [
-  { value: "active",    label: "Active",    color: "text-emerald-600" },
-  { value: "completed", label: "Completed", color: "text-blue-600"    },
-  { value: "dropped",   label: "Dropped",   color: "text-rose-600"    },
+  { value: "active", label: "Active", color: "text-emerald-600" },
+  { value: "completed", label: "Completed", color: "text-blue-600" },
+  { value: "dropped", label: "Dropped", color: "text-rose-600" },
 ];
 
 const GENDER_OPTIONS = ["Male", "Female", "Other"];
+
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 // ── Token helper ──────────────────────────────────────────────────────────────
 function getToken() {
   return (
     localStorage.getItem("access_token") ||
-    localStorage.getItem("access")        ||
+    localStorage.getItem("access") ||
     localStorage.getItem("token")
   );
 }
@@ -81,7 +89,7 @@ function InfoRow({ icon: Icon, label, value }) {
 // ── Change Status Dropdown ────────────────────────────────────────────────────
 function StatusChanger({ student, onUpdated }) {
   const { toast } = useToast();
-  const [open,    setOpen]    = useState(false);
+  const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleChange = async (newStatus) => {
@@ -94,19 +102,19 @@ function StatusChanger({ student, onUpdated }) {
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
       toast({
-        type:        "success",
-        title:       "Status updated!",
+        type: "success",
+        title: "Status updated!",
         description: `${student.name}'s status changed to ${newStatus}.`,
-        duration:    4000,
+        duration: 4000,
       });
       onUpdated(data);
     } catch (err) {
       console.error("[StatusChanger] error:", err.response?.data);
       toast({
-        type:        "error",
-        title:       "Failed to update status",
+        type: "error",
+        title: "Failed to update status",
         description: err.response?.data?.detail ?? "Please try again.",
-        duration:    5000,
+        duration: 5000,
       });
     } finally {
       setLoading(false);
@@ -168,28 +176,28 @@ function StatusChanger({ student, onUpdated }) {
 function EditStudentModal({ student, open, onClose, onSaved }) {
   const { toast } = useToast();
 
-  const [courses,    setCourses]    = useState([]);
+  const [courses, setCourses] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
-  const [form,       setForm]       = useState({});
+  const [form, setForm] = useState({});
 
   // Populate form from student data
   useEffect(() => {
     if (!student || !open) return;
     setForm({
-      name:           student.name           ?? "",
-      father_name:    student.father_name    ?? "",
-      mother_name:    student.mother_name    ?? "",
-      phone:          student.phone          ?? "",
-      email:          student.email          ?? "",
-      address:        student.address        ?? "",
-      qualification:  student.qualification  ?? "",
-      gender:         student.gender         ?? "",
-      dob:            student.dob            ?? "",
-      course:         student.course         ?? "",   // integer ID
+      name: student.name ?? "",
+      father_name: student.father_name ?? "",
+      mother_name: student.mother_name ?? "",
+      phone: student.phone ?? "",
+      email: student.email ?? "",
+      address: student.address ?? "",
+      qualification: student.qualification ?? "",
+      gender: student.gender ?? "",
+      dob: student.dob ?? "",
+      course: student.course ?? "",   // integer ID
       aadhaar_number: student.aadhaar_number ?? "",
-      comments:       student.comments       ?? "",
-      status:         student.status         ?? "active",
+      comments: student.comments ?? "",
+      status: student.status ?? "active",
     });
     setModalError("");
   }, [student, open]);
@@ -202,7 +210,7 @@ function EditStudentModal({ student, open, onClose, onSaved }) {
         headers: { Authorization: `Bearer ${getToken()}` },
       })
       .then(({ data }) => setCourses(Array.isArray(data) ? data : (data.results ?? [])))
-      .catch(() => {/* non-fatal */});
+      .catch(() => {/* non-fatal */ });
   }, [open]);
 
   const set = (field) => (e) =>
@@ -221,7 +229,7 @@ function EditStudentModal({ student, open, onClose, onSaved }) {
       const payload = {
         ...form,
         course: form.course !== "" ? Number(form.course) : null,
-        dob:    form.dob    || null,
+        dob: form.dob || null,
       };
       const { data } = await api.patch(
         `/api/students/${student.id}/`,
@@ -388,14 +396,27 @@ function EditStudentModal({ student, open, onClose, onSaved }) {
 
 // ── Main StudentDetail Page ───────────────────────────────────────────────────
 export default function StudentDetail() {
-  const { id }     = useParams();
-  const navigate   = useNavigate();
-  const { toast }  = useToast();
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
-  const [student,   setStudent]   = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [error,     setError]     = useState("");
-  const [editOpen,  setEditOpen]  = useState(false);
+  const [student, setStudent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  // ── Enrollments state ───────────────────────────────────────────────────────
+  const [enrollments, setEnrollments] = useState([]);
+  const [enrollLoading, setEnrollLoading] = useState(false);
+  const [enrollError, setEnrollError] = useState("");
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [enrollCourses, setEnrollCourses] = useState([]);
+  const [enrollForm, setEnrollForm] = useState({
+    course: "",
+    start_date: todayISO(),
+    end_date: "",
+    fee_amount: "",
+    note: "",
+  });
 
   const fetchStudent = useCallback(async () => {
     setLoading(true);
@@ -412,7 +433,27 @@ export default function StudentDetail() {
     }
   }, [id]);
 
+  // ── Fetch enrollments for the student ───────────────────────────────────────
+  const fetchEnrollments = useCallback(async () => {
+    if (!student) return;
+    setEnrollLoading(true);
+    setEnrollError("");
+    try {
+      const { data } = await api.get(`/api/students/${id}/enrollments/`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      });
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      setEnrollments(list);
+    } catch (err) {
+      setEnrollError(err.response?.data?.detail ?? "Failed to load enrollments.");
+    } finally {
+      setEnrollLoading(false);
+    }
+  }, [id, student]);
+
   useEffect(() => { fetchStudent(); }, [fetchStudent]);
+  // Load enrollments after student data is available
+  useEffect(() => { if (student) fetchEnrollments(); }, [student, fetchEnrollments]);
 
   // Called after status change or edit save — update local state immediately
   const handleUpdated = (updated) => setStudent(updated);
@@ -503,13 +544,13 @@ export default function StudentDetail() {
               </div>
             </div>
 
-            <InfoRow icon={User}       label="Father's Name"   value={student.father_name}   />
-            <InfoRow icon={User}       label="Mother's Name"   value={student.mother_name}   />
-            <InfoRow icon={Phone}      label="Phone"           value={student.phone}         />
-            <InfoRow icon={Mail}       label="Email"           value={student.email}         />
-            <InfoRow icon={Calendar}   label="Date of Birth"   value={student.dob}           />
-            <InfoRow icon={User}       label="Gender"          value={student.gender}        />
-            <InfoRow icon={MapPin}     label="Address"         value={student.address}       />
+            <InfoRow icon={User} label="Father's Name" value={student.father_name} />
+            <InfoRow icon={User} label="Mother's Name" value={student.mother_name} />
+            <InfoRow icon={Phone} label="Phone" value={student.phone} />
+            <InfoRow icon={Mail} label="Email" value={student.email} />
+            <InfoRow icon={Calendar} label="Date of Birth" value={student.dob} />
+            <InfoRow icon={User} label="Gender" value={student.gender} />
+            <InfoRow icon={MapPin} label="Address" value={student.address} />
           </div>
 
           {/* ── Academic info card ── */}
@@ -517,26 +558,24 @@ export default function StudentDetail() {
             <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Academic Info
             </p>
-            <InfoRow icon={BookOpen}      label="Course"          value={courseName}             />
-            <InfoRow icon={Calendar}      label="Join Date"       value={student.join_date}      />
-            <InfoRow icon={GraduationCap} label="Qualification"   value={student.qualification}  />
-            <InfoRow icon={CreditCard}    label="Aadhaar Number"  value={student.aadhaar_number} />
-            <InfoRow icon={ShieldCheck}   label="Sheet Row"       value={student.sheet_row ? `Row ${student.sheet_row}` : null} />
-            <InfoRow icon={MessageSquare} label="Comments"        value={student.comments}       />
+            <InfoRow icon={BookOpen} label="Course" value={courseName} />
+            <InfoRow icon={Calendar} label="Join Date" value={student.join_date} />
+            <InfoRow icon={GraduationCap} label="Qualification" value={student.qualification} />
+            <InfoRow icon={CreditCard} label="Aadhaar Number" value={student.aadhaar_number} />
+            <InfoRow icon={ShieldCheck} label="Sheet Row" value={student.sheet_row ? `Row ${student.sheet_row}` : null} />
+            <InfoRow icon={MessageSquare} label="Comments" value={student.comments} />
           </div>
         </div>
       )}
 
-      {/* ── Edit Modal ─────────────────────────────────────────────────── */}
+      {/* ── Edit Modal ──────────────────────────────────────────────────── */}
       <EditStudentModal
         student={student}
         open={editOpen}
         onClose={() => setEditOpen(false)}
-        onSaved={(updated) => {
-          handleUpdated(updated);
-          setEditOpen(false);
-        }}
+        onSaved={handleUpdated}
       />
     </div>
   );
+  
 }

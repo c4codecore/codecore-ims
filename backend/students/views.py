@@ -27,7 +27,7 @@ def sync_from_sheet(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def student_list(request):
-    status = request.query_params.get("status")  # ?status=active
+    status = request.query_params.get("status")
     students = Student.objects.all().order_by("name")
     
     if status:
@@ -123,6 +123,48 @@ def enrollment_list_create(request, pk):
 @permission_classes([IsAuthenticated])
 def enrollment_update(request, pk):
     """PATCH: partial update enrollment (status, end_date, note, fee_amount)."""
+    try:
+        enrollment = Enrollment.objects.get(pk=pk)
+    except Enrollment.DoesNotExist:
+        return Response({"error": "Enrollment not found"}, status=404)
+
+    serializer = EnrollmentSerializer(enrollment, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=400)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def student_enrollments(request, pk):
+    try:
+        student = Student.objects.get(pk=pk)
+    except Student.DoesNotExist:
+        return Response({"error": "Student not found"}, status=404)
+
+    if request.method == "GET":
+        from .models import Enrollment
+        from .serializers import EnrollmentSerializer
+        enrollments = Enrollment.objects.filter(student=student).select_related("course")
+        return Response(EnrollmentSerializer(enrollments, many=True).data)
+
+    elif request.method == "POST":
+        from .serializers import EnrollmentSerializer
+        data = request.data.copy()
+        data["student"] = pk
+        serializer = EnrollmentSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)
+
+
+@api_view(["PATCH"])
+@permission_classes([IsAuthenticated])
+def enrollment_update(request, pk):
+    from .models import Enrollment
+    from .serializers import EnrollmentSerializer
     try:
         enrollment = Enrollment.objects.get(pk=pk)
     except Enrollment.DoesNotExist:

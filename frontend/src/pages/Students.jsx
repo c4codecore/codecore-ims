@@ -9,9 +9,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Input }  from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge }  from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/useToast";
 import {
   Search,
@@ -28,9 +28,9 @@ import { cn } from "@/lib/utils";
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 const STATUS_VARIANT = {
-  active:    "success",
+  active: "success",
   completed: "info",
-  dropped:   "destructive",
+  dropped: "destructive",
 };
 
 function StatusBadge({ status }) {
@@ -77,12 +77,15 @@ export default function Students() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [students, setStudents]     = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState("");
-  const [syncing, setSyncing]       = useState(false);
-  const [search, setSearch]         = useState("");
+  // ── State ─────────────────────────────────────────────────────────────────
+  const [statusFilter, setStatusFilter] = useState(''); // '' = All
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [search, setSearch] = useState("");
   const [sortConfig, setSortConfig] = useState({ field: "name", dir: "asc" });
+
 
   const PAGE_SIZE = 15;
   const [page, setPage] = useState(1);
@@ -92,7 +95,8 @@ export default function Students() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await api.get("/api/students/");
+      const url = statusFilter ? `/api/students/?status=${statusFilter}` : "/api/students/";
+      const { data } = await api.get(url);
       setStudents(Array.isArray(data) ? data : (data.results ?? []));
     } catch (err) {
       setError(err.response?.data?.detail ?? "Failed to load students. Please try again.");
@@ -103,6 +107,8 @@ export default function Students() {
 
   useEffect(() => { fetchStudents(); }, []);
   useEffect(() => { setPage(1); }, [search]);
+  // Refetch when status filter changes
+  useEffect(() => { fetchStudents(); }, [statusFilter]);
 
   // ── Sync from Google Sheet ────────────────────────────────────────────────
   const handleSync = async () => {
@@ -111,8 +117,8 @@ export default function Students() {
       const { data } = await api.post("/api/students/sync/");
       const count = data?.synced ?? data?.count ?? data?.total ?? "";
       toast({
-        type:        "success",
-        title:       "Sync complete!",
+        type: "success",
+        title: "Sync complete!",
         description: count
           ? `${count} students synced from Google Sheet.`
           : "Students synced from Google Sheet.",
@@ -122,10 +128,10 @@ export default function Students() {
       await fetchStudents();
     } catch (err) {
       toast({
-        type:        "error",
-        title:       "Sync failed",
+        type: "error",
+        title: "Sync failed",
         description: err.response?.data?.detail ?? "Could not sync from Google Sheet.",
-        duration:    5000,
+        duration: 5000,
       });
     } finally {
       setSyncing(false);
@@ -148,11 +154,11 @@ export default function Students() {
 
     let rows = q
       ? students.filter(
-          (s) =>
-            s.name?.toLowerCase().includes(q) ||
-            s.phone?.toLowerCase().includes(q) ||
-            s.father_name?.toLowerCase().includes(q)
-        )
+        (s) =>
+          s.name?.toLowerCase().includes(q) ||
+          s.phone?.toLowerCase().includes(q) ||
+          s.father_name?.toLowerCase().includes(q)
+      )
       : students;
 
     rows = [...rows].sort((a, b) => {
@@ -167,16 +173,16 @@ export default function Students() {
 
   // ── Pagination ────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
-  const paginated  = processed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginated = processed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   // ── Counts ────────────────────────────────────────────────────────────────
   const counts = useMemo(() => {
     const all = search ? processed : students;
     return {
-      total:     all.length,
-      active:    all.filter((s) => s.status === "active").length,
+      total: all.length,
+      active: all.filter((s) => s.status === "active").length,
       completed: all.filter((s) => s.status === "completed").length,
-      dropped:   all.filter((s) => s.status === "dropped").length,
+      dropped: all.filter((s) => s.status === "dropped").length,
     };
   }, [students, processed, search]);
 
@@ -224,10 +230,10 @@ export default function Students() {
       {/* ── Stat pills ───────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2">
         {[
-          { label: "Total",     value: counts.total,     variant: "default"     },
-          { label: "Active",    value: counts.active,    variant: "success"     },
-          { label: "Completed", value: counts.completed, variant: "info"        },
-          { label: "Dropped",   value: counts.dropped,   variant: "destructive" },
+          { label: "Total", value: counts.total, variant: "default" },
+          { label: "Active", value: counts.active, variant: "success" },
+          { label: "Completed", value: counts.completed, variant: "info" },
+          { label: "Dropped", value: counts.dropped, variant: "destructive" },
         ].map(({ label, value, variant }) => (
           <Badge key={label} variant={variant} className="gap-1.5 px-3 py-1 text-xs">
             <Users className="size-3" />
@@ -238,6 +244,32 @@ export default function Students() {
 
       {/* ── Table card ───────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+
+        {/* ── Filter Tabs ── */}
+        <div className="flex gap-1 border-b border-border px-4 pt-3">
+          {[
+            { label: "All", value: "", count: counts.total },
+            { label: "Active", value: "active", count: counts.active },
+            { label: "Completed", value: "completed", count: counts.completed },
+            { label: "Dropped", value: "dropped", count: counts.dropped },
+          ].map(({ label, value, count }) => (
+            <button
+              key={value}
+              onClick={() => { setStatusFilter(value); setPage(1); }}
+              className={cn(
+                "px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
+                statusFilter === value
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {label}
+              <span className="ml-1.5 text-xs bg-muted rounded-full px-1.5 py-0.5">
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
 
         {/* Search + result count */}
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -296,12 +328,12 @@ export default function Students() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-10 text-center">#</TableHead>
-                <SortableHead label="Name"        field="name"        sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHead label="Name" field="name" sortConfig={sortConfig} onSort={handleSort} />
                 <SortableHead label="Father Name" field="father_name" sortConfig={sortConfig} onSort={handleSort} className="hidden lg:table-cell" />
-                <SortableHead label="Phone"       field="phone"       sortConfig={sortConfig} onSort={handleSort} className="hidden sm:table-cell" />
-                <SortableHead label="Course"      field="course"      sortConfig={sortConfig} onSort={handleSort} />
-                <SortableHead label="Join Date"   field="join_date"   sortConfig={sortConfig} onSort={handleSort} className="hidden md:table-cell" />
-                <SortableHead label="Status"      field="status"      sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHead label="Phone" field="phone" sortConfig={sortConfig} onSort={handleSort} className="hidden sm:table-cell" />
+                <SortableHead label="Course" field="course" sortConfig={sortConfig} onSort={handleSort} />
+                <SortableHead label="Join Date" field="join_date" sortConfig={sortConfig} onSort={handleSort} className="hidden md:table-cell" />
+                <SortableHead label="Status" field="status" sortConfig={sortConfig} onSort={handleSort} />
               </TableRow>
             </TableHeader>
 
@@ -345,7 +377,7 @@ export default function Students() {
                   {/* Course */}
                   <TableCell>
                     <Badge variant="secondary" className="font-normal">
-                      {student.course?.name ?? "—"}
+                      {student.course_name ?? student.course?.name ?? "—"}
                     </Badge>
                   </TableCell>
 
