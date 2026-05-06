@@ -248,10 +248,10 @@ export default function Students() {
         {/* ── Filter Tabs ── */}
         <div className="flex gap-1 border-b border-border px-4 pt-3">
           {[
-            { label: "All", value: "", count: counts.total },
             { label: "Active", value: "active", count: counts.active },
             { label: "Completed", value: "completed", count: counts.completed },
             { label: "Dropped", value: "dropped", count: counts.dropped },
+            { label: "All", value: "", count: counts.total },
           ].map(({ label, value, count }) => (
             <button
               key={value}
