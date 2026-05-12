@@ -2,7 +2,8 @@ import gspread
 from google.oauth2.service_account import Credentials
 from decouple import config
 from django.utils import timezone
-from .models import Student, Course
+from .models import Student, Course, Enrollment
+from datetime import datetime
 
 # ── Course name mapping: Sheet value (uppercase key) → DB name ───────────────
 COURSE_MAPPING = {
@@ -45,8 +46,6 @@ def clean(value):
 
 
 def parse_date(date_str):
-    from datetime import datetime
-
     if not date_str:
         return None
     for fmt in (
@@ -56,16 +55,6 @@ def parse_date(date_str):
         "%d-%m-%Y",
         "%d-%b-%Y",  # ← YEH ADD KARO — "4-Jun-2004" format
     ):
-        try:
-            return datetime.strptime(clean(date_str), fmt).date()
-        except ValueError:
-            continue
-    return None
-    from datetime import datetime
-
-    if not date_str:
-        return None
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y"):
         try:
             return datetime.strptime(clean(date_str), fmt).date()
         except ValueError:
@@ -117,6 +106,14 @@ def sync_students_from_sheet():
                 "synced_at": timezone.now(),
             },
         )
+        if course and not Enrollment.objects.filter(student=student, course=course).exists():
+            Enrollment.objects.create(
+                student    = student,
+                course     = course,
+                status     = student.status,
+                start_date = student.admission_date.date() if student.admission_date else timezone.now().date(),
+                fee_amount = student.total_fees,
+            )
 
         if was_created:
             created += 1

@@ -38,7 +38,7 @@ class FeePayment(models.Model):
     amount        = models.DecimalField(max_digits=8, decimal_places=2)
     payment_date  = models.DateField()
     payment_mode  = models.CharField(max_length=10, choices=PAYMENT_MODE, default="cash")
-    month         = models.CharField(max_length=20, blank=True)
+    # month         = models.CharField(max_length=20, blank=True)
     receipt_no    = models.CharField(max_length=20, unique=True, blank=True)
     note          = models.TextField(blank=True)
     created_at    = models.DateTimeField(auto_now_add=True)

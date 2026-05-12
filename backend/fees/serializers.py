@@ -6,7 +6,7 @@ class FeePaymentSerializer(serializers.ModelSerializer):
         model  = FeePayment
         fields = [
             "id", "fee_structure", "amount", "payment_date",
-            "payment_mode", "month", "receipt_no", "note", "created_at"
+            "payment_mode", "receipt_no", "note", "created_at"
         ]
         read_only_fields = ["receipt_no", "created_at"]
 
