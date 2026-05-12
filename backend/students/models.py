@@ -6,7 +6,7 @@ class Course(models.Model):
         ("quarterly",   "Quarterly"),
         ("full",        "Full Payment"),
     )
-
+     
     name              = models.CharField(max_length=100)
     short_name        = models.CharField(max_length=20, blank=True)  # DCA, ADCA, DAC
     description       = models.TextField(blank=True)
@@ -54,10 +54,12 @@ class Student(models.Model):
     # Course
     course             = models.ForeignKey(Course, on_delete=models.SET_NULL,
                                            null=True, blank=True)
+
+    admission_date     = models.DateTimeField(null=True, blank=True)   # actual admission date
+    total_fees         = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
     comments           = models.TextField(blank=True)
 
     # Internal fields
-    join_date          = models.DateField(auto_now_add=True)
     status             = models.CharField(max_length=10, choices=STATUS_CHOICES,
                                           default="active")
     
@@ -76,21 +78,19 @@ class Enrollment(models.Model):
         ("dropped",   "Dropped"),
     )
 
-    student     = models.ForeignKey(Student, on_delete=models.CASCADE,
-                                    related_name="enrollments")
-    course      = models.ForeignKey(Course, on_delete=models.SET_NULL,
-                                    null=True, related_name="enrollments")
-    status      = models.CharField(max_length=10, choices=STATUS_CHOICES,
-                                   default="active")
-    start_date  = models.DateField()
-    end_date    = models.DateField(null=True, blank=True)  # course complete hone ki date
-    fee_amount  = models.DecimalField(max_digits=8, decimal_places=2,
-                                      null=True, blank=True)  # custom fee
-    note        = models.TextField(blank=True)
-    created_at  = models.DateTimeField(auto_now_add=True)
+    student    = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
+    course     = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True, related_name="enrollments")
+    roll_no    = models.CharField(max_length=100, unique=True, null=True, blank=True)
+    session    = models.IntegerField(null=True, blank=True)   # months: 3, 6, 12
+    status     = models.CharField(max_length=10, choices=STATUS_CHOICES, default="active")
+    start_date = models.DateField()
+    end_date   = models.DateField(null=True, blank=True)
+    fee_amount = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+    note       = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-start_date"]
 
     def __str__(self):
-        return f"{self.student.name} → {self.course.name} ({self.status})"
+        return f"{self.student.name} → {self.course.name if self.course else '—'} ({self.roll_no})"

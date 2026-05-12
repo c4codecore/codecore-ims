@@ -4,7 +4,7 @@ from .models import Course, Student, Enrollment
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display  = ["name", "phone", "email", "course", "status", "join_date"]
+    list_display  = ["name", "phone", "email", "course", "status", "admission_date"]
     list_filter   = ["status", "course", "gender"]
     search_fields = ["name", "phone", "email", "aadhaar_number"]
 
