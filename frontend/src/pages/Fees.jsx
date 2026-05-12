@@ -3,9 +3,9 @@ import api from "@/api/axios";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Input }  from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge }  from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -18,6 +18,8 @@ import {
   Plus, RefreshCw, Loader2, ChevronDown, ChevronUp, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { generateReceiptPDF } from '@/lib/generateReceipt';
+import { Download, Mail, MessageCircle } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt(amount) {
@@ -29,7 +31,7 @@ function fmt(amount) {
 
 function todayISO() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 // ── Summary Card ──────────────────────────────────────────────────────────────
@@ -52,19 +54,19 @@ function SummaryCard({ label, value, icon: Icon, colorClass, loading }) {
 // ── Add Fee Structure Modal ───────────────────────────────────────────────────
 function AddFeeModal({ open, onClose, onSuccess }) {
   const { toast } = useToast();
-  const [students,     setStudents]     = useState([]);
-  const [enrollments,  setEnrollments]  = useState([]);
+  const [students, setStudents] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
   const [loadStudents, setLoadStudents] = useState(false);
-  const [loadEnroll,   setLoadEnroll]   = useState(false);
-  const [submitting,   setSubmitting]   = useState(false);
-  const [modalError,   setModalError]   = useState("");
+  const [loadEnroll, setLoadEnroll] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [modalError, setModalError] = useState("");
   const [form, setForm] = useState({
     student: "", enrollment: "", total_fee: "", discount: "0", note: "",
   });
 
   const finalFee = useMemo(() => {
     const t = parseFloat(form.total_fee) || 0;
-    const d = parseFloat(form.discount)  || 0;
+    const d = parseFloat(form.discount) || 0;
     return Math.max(0, t - d);
   }, [form.total_fee, form.discount]);
 
@@ -127,9 +129,9 @@ function AddFeeModal({ open, onClose, onSuccess }) {
     try {
       await api.post("/api/fees/create/", {
         enrollment: Number(form.enrollment),
-        total_fee:  parseFloat(form.total_fee),
-        discount:   parseFloat(form.discount) || 0,
-        note:       form.note,
+        total_fee: parseFloat(form.total_fee),
+        discount: parseFloat(form.discount) || 0,
+        note: form.note,
       });
       toast({ type: "success", title: "Fee structure created!", duration: 4000 });
       handleClose();
@@ -161,13 +163,13 @@ function AddFeeModal({ open, onClose, onSuccess }) {
             {loadStudents
               ? <div className="flex h-8 items-center gap-2 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" /> Loading…</div>
               : <Select value={form.student} onValueChange={(v) => setForm(p => ({ ...p, student: v, enrollment: "", total_fee: "" }))}>
-                  <SelectTrigger><SelectValue placeholder="Select student…" /></SelectTrigger>
-                  <SelectContent>
-                    {students.map(s => (
-                      <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SelectTrigger><SelectValue placeholder="Select student…" /></SelectTrigger>
+                <SelectContent>
+                  {students.map(s => (
+                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             }
           </div>
 
@@ -180,15 +182,15 @@ function AddFeeModal({ open, onClose, onSuccess }) {
                 : enrollments.length === 0
                   ? <p className="text-sm text-muted-foreground">No enrollments found. Add enrollment first.</p>
                   : <Select value={form.enrollment} onValueChange={handleEnrollmentChange}>
-                      <SelectTrigger><SelectValue placeholder="Select enrollment…" /></SelectTrigger>
-                      <SelectContent>
-                        {enrollments.map(e => (
-                          <SelectItem key={e.id} value={String(e.id)}>
-                            {e.course_name} {e.roll_no ? `(${e.roll_no})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SelectTrigger><SelectValue placeholder="Select enrollment…" /></SelectTrigger>
+                    <SelectContent>
+                      {enrollments.map(e => (
+                        <SelectItem key={e.id} value={String(e.id)}>
+                          {e.course_name} {e.roll_no ? `(${e.roll_no})` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
               }
             </div>
           )}
@@ -280,11 +282,11 @@ function AddPaymentModal({ open, feeStructureId, onClose, onSuccess }) {
     try {
       await api.post("/api/fees/payments/create/", {
         fee_structure: feeStructureId,
-        amount:        parseFloat(form.amount),
-        payment_date:  form.payment_date,
-        payment_mode:  form.payment_mode,
-        month:         form.month,
-        note:          form.note,
+        amount: parseFloat(form.amount),
+        payment_date: form.payment_date,
+        payment_mode: form.payment_mode,
+        month: form.month,
+        note: form.note,
       });
       toast({ type: "success", title: "Payment added!", duration: 3000 });
       handleClose();
@@ -356,7 +358,7 @@ function AddPaymentModal({ open, feeStructureId, onClose, onSuccess }) {
 function PaymentHistory({ fee, onPaymentAdded }) {
   const { toast } = useToast();
   const [paymentModal, setPaymentModal] = useState(false);
-  const [deletingId,   setDeletingId]   = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
 
   const handleDelete = async (paymentId) => {
     if (!confirm("Delete this payment?")) return;
@@ -427,16 +429,54 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                 </td>
                 <td className="py-1.5 text-muted-foreground">{p.month || "—"}</td>
                 <td className="py-1.5 font-mono text-xs text-muted-foreground">{p.receipt_no}</td>
+
+                {/* --- Updated Action Cell --- */}
                 <td className="py-1.5 text-right">
-                  <button
-                    onClick={() => handleDelete(p.id)}
-                    disabled={deletingId === p.id}
-                    className="text-destructive hover:text-destructive/80 transition-colors"
-                  >
-                    {deletingId === p.id
-                      ? <Loader2 className="size-3.5 animate-spin" />
-                      : <Trash2 className="size-3.5" />}
-                  </button>
+                  <div className="flex items-center justify-end gap-2.5">
+
+                    {/* 1. Download PDF */}
+                    <button
+                      onClick={() => {
+                        console.log("Button clicked!", p, fee); // Yeh console mein check karo
+                        generateReceiptPDF(p, fee);
+                      }}
+                      className="text-blue-600"
+                    >
+                      <Download className="size-3.5" />
+                    </button>
+
+                    {/* 2. Send Gmail */}
+                    <button
+                      onClick={() => alert('Gmail functionality coming soon!')} // Baad mein fix karenge
+                      className="text-red-500 hover:text-red-700 transition-colors"
+                      title="Send Email"
+                    >
+                      <Mail className="size-3.5" />
+                    </button>
+
+                    {/* 3. WhatsApp Message */}
+                    <button
+                      onClick={() => {
+                        const msg = encodeURIComponent(`Hi ${fee.student_name}, payment of ₹${p.amount} received. Receipt: ${p.receipt_no}. Thanks - CodeCore`);
+                        window.open(`https://wa.me/${fee.student_phone}?text=${msg}`, '_blank');
+                      }}
+                      className="text-green-600 hover:text-green-800 transition-colors"
+                      title="WhatsApp Message"
+                    >
+                      <MessageCircle className="size-3.5" />
+                    </button>
+
+                    {/* 4. Delete (Existing) */}
+                    <button
+                      onClick={() => handleDelete(p.id)}
+                      disabled={deletingId === p.id}
+                      className="text-destructive hover:text-destructive/80 transition-colors"
+                    >
+                      {deletingId === p.id
+                        ? <Loader2 className="size-3.5 animate-spin" />
+                        : <Trash2 className="size-3.5" />}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -465,13 +505,13 @@ function PaymentHistory({ fee, onPaymentAdded }) {
 export default function Fees() {
   const { toast } = useToast();
 
-  const [fees,        setFees]        = useState([]);
-  const [summary,     setSummary]     = useState(null);
-  const [loading,     setLoading]     = useState(true);
+  const [fees, setFees] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [summLoading, setSummLoading] = useState(true);
-  const [error,       setError]       = useState("");
-  const [modalOpen,   setModalOpen]   = useState(false);
-  const [expandedId,  setExpandedId]  = useState(null);
+  const [error, setError] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
 
   const fetchFees = useCallback(async () => {
     setLoading(true);
@@ -506,10 +546,10 @@ export default function Fees() {
   const handleRefresh = () => { fetchFees(); fetchSummary(); };
 
   const summaryCards = [
-    { label: "Total Final Fee",  value: summary ? fmt(summary.total_final_fee) : "—", icon: CircleDollarSign, colorClass: "text-blue-500 bg-blue-500/10"    },
-    { label: "Total Collected",  value: summary ? fmt(summary.total_paid)      : "—", icon: CheckCircle2,     colorClass: "text-emerald-500 bg-emerald-500/10" },
-    { label: "Total Balance",    value: summary ? fmt(summary.total_balance)   : "—", icon: Wallet,           colorClass: "text-rose-500 bg-rose-500/10"       },
-    { label: "Total Students",   value: summary?.total_students ?? "—",               icon: CircleDollarSign, colorClass: "text-amber-500 bg-amber-500/10"     },
+    { label: "Total Final Fee", value: summary ? fmt(summary.total_final_fee) : "—", icon: CircleDollarSign, colorClass: "text-blue-500 bg-blue-500/10" },
+    { label: "Total Collected", value: summary ? fmt(summary.total_paid) : "—", icon: CheckCircle2, colorClass: "text-emerald-500 bg-emerald-500/10" },
+    { label: "Total Balance", value: summary ? fmt(summary.total_balance) : "—", icon: Wallet, colorClass: "text-rose-500 bg-rose-500/10" },
+    { label: "Total Students", value: summary?.total_students ?? "—", icon: CircleDollarSign, colorClass: "text-amber-500 bg-amber-500/10" },
   ];
 
   return (
