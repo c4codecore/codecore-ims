@@ -549,32 +549,39 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                     {/* 3. WhatsApp Message */}
                     <button
                       onClick={() => {
-                        const msg = encodeURIComponent(
-                          `*CODE CORE COMPUTER CENTER* 🎓
+                        const date = new Date(p.payment_date).toLocaleDateString('en-IN', {
+                          day: '2-digit', month: 'long', year: 'numeric'
+                        });
+                        const amount = Number(p.amount).toLocaleString('en-IN');
+
+                        const msg =
+                          `*CODE CORE COMPUTER CENTER*
 _Empowering Futures Through Technology_
 
 Dear *${fee.student_name}*,
 
-✅ Your fee payment has been successfully received.
+Your fee payment has been successfully received.
 
 *RECEIPT DETAILS*
-━━━━━━━━━━━━━━━━━━━
-🧾 Receipt No.  : *${p.receipt_no}*
-💰 Amount Paid  : *Rs. ${Number(p.amount).toLocaleString('en-IN')}*
-📚 Course       : *${fee.course_name}*
-📅 Date         : *${new Date(p.payment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}*
-━━━━━━━━━━━━━━━━━━━
+-----------------------------
+Receipt No.  : *${p.receipt_no}*
+Amount Paid  : *Rs. ${amount}*
+Course       : *${fee.course_name}*
+Date         : *${date}*
+-----------------------------
 
 Please keep this message for your records.
-
 If you have any questions, feel free to contact us.
 
-📞 +91-9013010909
-🌐 www.codecore.in
+*+91-9013010909*
+www.codecore.in
 
-_Thank you for choosing Code Core Computer Center!_ 🙏`
+_Thank you for choosing Code Core Computer Center!_`;
+
+                        window.open(
+                          `https://wa.me/91${fee.student_phone?.replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(msg)}`,
+                          '_blank'
                         );
-                        window.open(`https://wa.me/91${fee.student_phone?.replace(/\D/g, '').slice(-10)}?text=${msg}`, '_blank');
                       }}
                       className="text-green-600 hover:text-green-800 transition-colors"
                       title="WhatsApp Message"
