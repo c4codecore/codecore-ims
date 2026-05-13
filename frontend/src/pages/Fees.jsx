@@ -508,7 +508,7 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                       disabled={sendingEmail === p.id}
                       onClick={async () => {
                         if (!fee.student_email) {
-                          toast({ type: 'error', title: 'Student ka email nahi hai', duration: 3000 });
+                          toast({ type: 'error', title: 'Student email not found', duration: 3000 });
                           return;
                         }
                         setSendingEmail(p.id);
@@ -527,10 +527,10 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                             course_name: fee.course_name,
                             pdf_base64,
                           });
-                          toast({ type: 'success', title: 'Email bhej diya gaya! ✅', duration: 4000 });
+                          toast({ type: 'success', title: 'Email sent! ✅', duration: 4000 });
                         } catch (err) {
                           console.error('Email send error:', err);
-                          toast({ type: 'error', title: 'Email nahi gayi, dobara try karo', duration: 4000 });
+                          toast({ type: 'error', title: 'Email not sent, please try again', duration: 4000 });
                         } finally {
                           setSendingEmail(null);
                         }
