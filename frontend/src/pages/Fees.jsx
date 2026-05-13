@@ -471,13 +471,11 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                   </Badge>
                 </td>
                 <td className="py-1.5 text-muted-foreground">{p.month || "—"}</td>
-                <td className="py-1.5 font-mono text-xs text-muted-foreground">{p.receipt_no}</td>
+                <td className="py-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-muted-foreground">{p.receipt_no}</span>
 
-                {/* --- Updated Action Cell --- */}
-                <td className="py-1.5 text-right">
-                  <div className="flex items-center justify-end gap-2.5">
-
-                    {/* 1. Download PDF */}
+                    {/* Download PDF */}
                     <button
                       onClick={async () => {
                         setLoadingReceipt(true);
@@ -505,11 +503,10 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                       }
                     </button>
 
-                    {/* 2. Send Gmail */}
+                    {/* Send Email */}
                     <button
                       disabled={sendingEmail === p.id}
                       onClick={async () => {
-                        // Check student email
                         if (!fee.student_email) {
                           toast({ type: 'error', title: 'Student ka email nahi hai', duration: 3000 });
                           return;
@@ -546,14 +543,13 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                         : <Mail className="size-3.5" />}
                     </button>
 
-                    {/* 3. WhatsApp Message */}
+                    {/* WhatsApp */}
                     <button
                       onClick={() => {
                         const date = new Date(p.payment_date).toLocaleDateString('en-IN', {
                           day: '2-digit', month: 'long', year: 'numeric'
                         });
                         const amount = Number(p.amount).toLocaleString('en-IN');
-
                         const msg =
                           `*CODE CORE COMPUTER CENTER*
 _Empowering Futures Through Technology_
@@ -577,7 +573,6 @@ If you have any questions, feel free to contact us.
 www.codecore.in
 
 _Thank you for choosing Code Core Computer Center!_`;
-
                         window.open(
                           `https://wa.me/91${fee.student_phone?.replace(/\D/g, '').slice(-10)}?text=${encodeURIComponent(msg)}`,
                           '_blank'
@@ -588,18 +583,21 @@ _Thank you for choosing Code Core Computer Center!_`;
                     >
                       <MessageCircle className="size-3.5" />
                     </button>
-
-                    {/* 4. Delete (Existing) */}
-                    <button
-                      onClick={() => handleDelete(p.id)}
-                      disabled={deletingId === p.id}
-                      className="text-destructive hover:text-destructive/80 transition-colors"
-                    >
-                      {deletingId === p.id
-                        ? <Loader2 className="size-3.5 animate-spin" />
-                        : <Trash2 className="size-3.5" />}
-                    </button>
                   </div>
+                </td>
+
+                {/* Action: Delete only */}
+                <td className="py-1.5 text-right">
+                  <button
+                    onClick={() => handleDelete(p.id)}
+                    disabled={deletingId === p.id}
+                    className="text-destructive hover:text-destructive/80 transition-colors disabled:opacity-50"
+                    title="Delete payment"
+                  >
+                    {deletingId === p.id
+                      ? <Loader2 className="size-3.5 animate-spin" />
+                      : <Trash2 className="size-3.5" />}
+                  </button>
                 </td>
               </tr>
             ))}
