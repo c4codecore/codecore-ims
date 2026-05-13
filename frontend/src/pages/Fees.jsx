@@ -34,6 +34,61 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Logo — /public/logo.png se base64 banao (ek baar load hoga)
+// function useLogoBase64() {
+//   const [logoBase64, setLogoBase64] = useState(null);
+//   useEffect(() => {
+//     const img = new Image();
+//     img.src = '/logo.png';
+//     img.onload = () => {
+//       const canvas = document.createElement('canvas');
+//       canvas.width = img.width;
+//       canvas.height = img.height;
+//       canvas.getContext('2d').drawImage(img, 0, 0);
+//       setLogoBase64(canvas.toDataURL('image/png'));
+//     };
+//   }, []);
+//   return logoBase64;
+// }
+
+// Fees.jsx ke top mein — logo + stamp dono load karo
+function useAssetBase64(src) {
+  const [b64, setB64] = useState(null);
+  useEffect(() => {
+    const img = new Image();
+    img.src = src;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      setB64(canvas.toDataURL('image/png'));
+    };
+  }, [src]);
+  return b64;
+}
+
+// Google Drive URL se base64 photo
+async function getPhotoBase64(photoUrl) {
+  if (!photoUrl) return null;
+  try {
+    const fileId = photoUrl.match(/[-\w]{25,}/)?.[0];
+    if (!fileId) return null;
+    const directUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    const res = await fetch(directUrl);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn('Photo load failed, placeholder use hoga:', e);
+    return null;
+  }
+}
+
 // ── Summary Card ──────────────────────────────────────────────────────────────
 function SummaryCard({ label, value, icon: Icon, colorClass, loading }) {
   return (
@@ -359,6 +414,9 @@ function PaymentHistory({ fee, onPaymentAdded }) {
   const { toast } = useToast();
   const [paymentModal, setPaymentModal] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const logoBase64 = useAssetBase64('/logo.png');
+  const stampBase64 = useAssetBase64('/stamp.png');
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
 
   const handleDelete = async (paymentId) => {
     if (!confirm("Delete this payment?")) return;
@@ -418,7 +476,8 @@ function PaymentHistory({ fee, onPaymentAdded }) {
           </thead>
           <tbody>
             {fee.payments.map((p, idx) => (
-              <tr key={p.id} className="border-b border-border/50 last:border-0">
+              <tr key={p.id || p.receipt_no || idx}
+                className="border-b border-border/50 last:border-0">
                 <td className="py-1.5 text-muted-foreground">{idx + 1}</td>
                 <td className="py-1.5">{p.payment_date}</td>
                 <td className="py-1.5 font-medium">{fmt(p.amount)}</td>
@@ -436,13 +495,31 @@ function PaymentHistory({ fee, onPaymentAdded }) {
 
                     {/* 1. Download PDF */}
                     <button
-                      onClick={() => {
-                        console.log("Button clicked!", p, fee); // Yeh console mein check karo
-                        generateReceiptPDF(p, fee);
+                      onClick={async () => {
+                        setLoadingReceipt(true);
+                        try {
+                          console.log("DEBUG fee object:", JSON.stringify(fee, null, 2));
+                          const photoBase64 = await getPhotoBase64(fee.student_photo_url);
+                          generateReceiptPDF(fee.payments, fee, {
+                            logoBase64,
+                            stampBase64,
+                            photoBase64,
+                          });
+                        } catch (err) {
+                          console.error('Receipt error:', err);
+                          alert('Receipt generate nahi hui, dobara try karo.');
+                        } finally {
+                          setLoadingReceipt(false);
+                        }
                       }}
-                      className="text-blue-600"
+                      disabled={loadingReceipt}
+                      className="text-blue-600 hover:text-blue-800 transition-colors disabled:opacity-50"
+                      title="Download Receipt"
                     >
-                      <Download className="size-3.5" />
+                      {loadingReceipt
+                        ? <Loader2 className="size-3.5 animate-spin" />
+                        : <Download className="size-3.5" />
+                      }
                     </button>
 
                     {/* 2. Send Gmail */}
