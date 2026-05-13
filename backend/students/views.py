@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from .sheet_sync import sync_students_from_sheet
 from .models import Student, Course, Enrollment
 from .serializers import StudentSerializer, CourseSerializer, EnrollmentSerializer
+import requests
+from django.http import HttpResponse
 
 
 @api_view(["POST"])
@@ -175,3 +177,10 @@ def enrollment_update(request, pk):
         serializer.save()
         return Response(serializer.data)
     return Response(serializer.errors, status=400)
+
+# students/views.py
+def proxy_drive_image(request):
+    file_id = request.GET.get('id')
+    url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w400"
+    resp = requests.get(url)
+    return HttpResponse(resp.content, content_type=resp.headers['Content-Type'])

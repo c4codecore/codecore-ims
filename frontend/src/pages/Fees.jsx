@@ -18,7 +18,7 @@ import {
   Plus, RefreshCw, Loader2, ChevronDown, ChevronUp, Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { generateReceiptPDF } from '@/lib/generateReceipt';
+import { generateReceiptPDF, generateReceiptPDFBase64 } from '@/lib/generateReceipt';
 import { Download, Mail, MessageCircle } from 'lucide-react';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -33,23 +33,6 @@ function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
-// Logo — /public/logo.png se base64 banao (ek baar load hoga)
-// function useLogoBase64() {
-//   const [logoBase64, setLogoBase64] = useState(null);
-//   useEffect(() => {
-//     const img = new Image();
-//     img.src = '/logo.png';
-//     img.onload = () => {
-//       const canvas = document.createElement('canvas');
-//       canvas.width = img.width;
-//       canvas.height = img.height;
-//       canvas.getContext('2d').drawImage(img, 0, 0);
-//       setLogoBase64(canvas.toDataURL('image/png'));
-//     };
-//   }, []);
-//   return logoBase64;
-// }
 
 // Fees.jsx ke top mein — logo + stamp dono load karo
 function useAssetBase64(src) {
@@ -74,7 +57,7 @@ async function getPhotoBase64(photoUrl) {
   try {
     const fileId = photoUrl.match(/[-\w]{25,}/)?.[0];
     if (!fileId) return null;
-    const directUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
+    const directUrl = `http://localhost:8000/api/students/proxy-image/?id=${fileId}`;
     const res = await fetch(directUrl);
     if (!res.ok) return null;
     const blob = await res.blob();
@@ -417,6 +400,7 @@ function PaymentHistory({ fee, onPaymentAdded }) {
   const logoBase64 = useAssetBase64('/logo.png');
   const stampBase64 = useAssetBase64('/stamp.png');
   const [loadingReceipt, setLoadingReceipt] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(null); // payment id being emailed
 
   const handleDelete = async (paymentId) => {
     if (!confirm("Delete this payment?")) return;
@@ -498,7 +482,6 @@ function PaymentHistory({ fee, onPaymentAdded }) {
                       onClick={async () => {
                         setLoadingReceipt(true);
                         try {
-                          console.log("DEBUG fee object:", JSON.stringify(fee, null, 2));
                           const photoBase64 = await getPhotoBase64(fee.student_photo_url);
                           generateReceiptPDF(fee.payments, fee, {
                             logoBase64,
@@ -524,18 +507,74 @@ function PaymentHistory({ fee, onPaymentAdded }) {
 
                     {/* 2. Send Gmail */}
                     <button
-                      onClick={() => alert('Gmail functionality coming soon!')} // Baad mein fix karenge
-                      className="text-red-500 hover:text-red-700 transition-colors"
+                      disabled={sendingEmail === p.id}
+                      onClick={async () => {
+                        // Check student email
+                        if (!fee.student_email) {
+                          toast({ type: 'error', title: 'Student ka email nahi hai', duration: 3000 });
+                          return;
+                        }
+                        setSendingEmail(p.id);
+                        try {
+                          const photoBase64 = await getPhotoBase64(fee.student_photo_url);
+                          const pdf_base64 = generateReceiptPDFBase64(fee.payments, fee, {
+                            logoBase64,
+                            stampBase64,
+                            photoBase64,
+                          });
+                          await api.post('/api/fees/payments/send-receipt/', {
+                            email: fee.student_email,
+                            student_name: fee.student_name,
+                            receipt_no: p.receipt_no,
+                            amount: p.amount,
+                            course_name: fee.course_name,
+                            pdf_base64,
+                          });
+                          toast({ type: 'success', title: 'Email bhej diya gaya! ✅', duration: 4000 });
+                        } catch (err) {
+                          console.error('Email send error:', err);
+                          toast({ type: 'error', title: 'Email nahi gayi, dobara try karo', duration: 4000 });
+                        } finally {
+                          setSendingEmail(null);
+                        }
+                      }}
+                      className="text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
                       title="Send Email"
                     >
-                      <Mail className="size-3.5" />
+                      {sendingEmail === p.id
+                        ? <Loader2 className="size-3.5 animate-spin" />
+                        : <Mail className="size-3.5" />}
                     </button>
 
                     {/* 3. WhatsApp Message */}
                     <button
                       onClick={() => {
-                        const msg = encodeURIComponent(`Hi ${fee.student_name}, payment of ₹${p.amount} received. Receipt: ${p.receipt_no}. Thanks - CodeCore`);
-                        window.open(`https://wa.me/${fee.student_phone}?text=${msg}`, '_blank');
+                        const msg = encodeURIComponent(
+                          `*CODE CORE COMPUTER CENTER* 🎓
+_Empowering Futures Through Technology_
+
+Dear *${fee.student_name}*,
+
+✅ Your fee payment has been successfully received.
+
+*RECEIPT DETAILS*
+━━━━━━━━━━━━━━━━━━━
+🧾 Receipt No.  : *${p.receipt_no}*
+💰 Amount Paid  : *Rs. ${Number(p.amount).toLocaleString('en-IN')}*
+📚 Course       : *${fee.course_name}*
+📅 Date         : *${new Date(p.payment_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}*
+━━━━━━━━━━━━━━━━━━━
+
+Please keep this message for your records.
+
+If you have any questions, feel free to contact us.
+
+📞 +91-9013010909
+🌐 www.codecore.in
+
+_Thank you for choosing Code Core Computer Center!_ 🙏`
+                        );
+                        window.open(`https://wa.me/91${fee.student_phone?.replace(/\D/g, '').slice(-10)}?text=${msg}`, '_blank');
                       }}
                       className="text-green-600 hover:text-green-800 transition-colors"
                       title="WhatsApp Message"

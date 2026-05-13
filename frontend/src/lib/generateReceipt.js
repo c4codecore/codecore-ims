@@ -224,9 +224,10 @@ function drawStudentInfo(doc, startY, enrollment, photoBase64) {
     } catch(_) {
       drawPhotoPlaceholder(doc, photoX, photoY, photoW, photoH - 2);
     }
-  } else {
-    drawPhotoPlaceholder(doc, photoX, photoY, photoW, photoH - 2);
-  }
+  } 
+  // else {
+  //   drawPhotoPlaceholder(doc, photoX, photoY, photoW, photoH - 2);
+  // }
 
   const fields = [
     ['Name',          enrollment.student_name  || 'N/A'],
@@ -460,57 +461,70 @@ function drawFooter(doc, startY) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  MAIN EXPORT
+//  SHARED INTERNAL BUILDER — returns a fully-rendered jsPDF instance
+// ─────────────────────────────────────────────────────────────────────────────
+function buildReceiptDoc(payment, enrollment, options = {}) {
+  const { logoBase64, photoBase64, stampBase64 } = options;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+
+  drawWatermark(doc);
+
+  let y = drawHeader(doc, logoBase64);
+
+  const latestPay = Array.isArray(payment) ? payment[payment.length - 1] : payment;
+  y = drawReceiptTitleBar(doc, y, latestPay.receipt_no, todayStr());
+  y = drawStudentInfo(doc, y, enrollment, photoBase64);
+  y = drawFeeSummary(doc, y, enrollment);
+  y = drawPaymentHistory(doc, y, payment);
+
+  if (y + 40 < 244) {
+    y = drawTermsAndDeclaration(doc, y);
+  }
+
+  drawStamp(doc, stampBase64);
+  drawAdBanner(doc, 247);
+  drawFooter(doc, 272);
+
+  return { doc, latestPay };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PUBLIC EXPORTS
 // ─────────────────────────────────────────────────────────────────────────────
 /**
- * generateReceiptPDF(payment, enrollment, options?)
+ * generateReceiptPDF — builds and downloads the PDF directly.
  *
  * @param {Object|Object[]} payment    - single payment OR array of all past payments
  * @param {Object}          enrollment - student/enrollment record
- * @param {Object}          [options]
- * @param {string}          [options.logoBase64]  - your logo PNG as base64 data URL
- * @param {string}          [options.photoBase64] - student photo as base64 data URL
- * @param {string}          [options.stampBase64] - stamp.png as base64 data URL
- *
- * Field mapping (all variants supported):
- *   enrollment.student_name | roll_no | father_name | student_phone
- *   enrollment.course_name  | joining_date | created_at
- *   enrollment.total_final_fee | total_fees
- *   enrollment.discount | discount_amount
- *   enrollment.total_collected | fees_paid | paidAmount
- *   enrollment.total_pending   | balance   | balanceAmount
- *   payment.payment_date | amount | payment_mode | receipt_no
+ * @param {Object}          [options]  - logoBase64, photoBase64, stampBase64
  */
-
-
 export const generateReceiptPDF = (payment, enrollment, options = {}) => {
   try {
-    const { logoBase64, photoBase64, stampBase64 } = options;
-    const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
-
-    drawWatermark(doc);
-
-    let y = drawHeader(doc, logoBase64);
-
-    const latestPay = Array.isArray(payment) ? payment[payment.length - 1] : payment;
-    y = drawReceiptTitleBar(doc, y, latestPay.receipt_no, todayStr());
-    y = drawStudentInfo(doc, y, enrollment, photoBase64);
-    y = drawFeeSummary(doc, y, enrollment);
-    y = drawPaymentHistory(doc, y, payment);
-
-    if (y + 40 < 244) {
-      y = drawTermsAndDeclaration(doc, y);
-    }
-
-    // Stamp — fully visible above ad banner
-    drawStamp(doc, stampBase64);
-
-    drawAdBanner(doc, 247);
-    drawFooter(doc, 272);
-
+    const { doc, latestPay } = buildReceiptDoc(payment, enrollment, options);
     doc.save(`Receipt_${latestPay.receipt_no || 'CC'}.pdf`);
   } catch (err) {
     console.error('[generateReceiptPDF] Error:', err);
+    throw err;
+  }
+};
+
+/**
+ * generateReceiptPDFBase64 — builds the PDF and returns it as a base64 string.
+ * Used for email sending (no file download triggered).
+ *
+ * @param {Object|Object[]} payment    - single payment OR array of all past payments
+ * @param {Object}          enrollment - student/enrollment record
+ * @param {Object}          [options]  - logoBase64, photoBase64, stampBase64
+ * @returns {string} base64-encoded PDF (without data-URL prefix)
+ */
+export const generateReceiptPDFBase64 = (payment, enrollment, options = {}) => {
+  try {
+    const { doc } = buildReceiptDoc(payment, enrollment, options);
+    // output('datauristring') returns "data:application/pdf;base64,<data>"
+    const dataUri = doc.output('datauristring');
+    return dataUri.split(',')[1]; // return only the raw base64 part
+  } catch (err) {
+    console.error('[generateReceiptPDFBase64] Error:', err);
     throw err;
   }
 };

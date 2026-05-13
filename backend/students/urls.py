@@ -12,5 +12,5 @@ urlpatterns = [
         "<int:pk>/enrollments/", views.student_enrollments, name="student-enrollments"
     ),
     path("enrollments/<int:pk>/", views.enrollment_update, name="enrollment-update"),
-    
+    path('proxy-image/', views.proxy_drive_image),
 ]
