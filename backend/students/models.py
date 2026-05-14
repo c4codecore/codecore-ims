@@ -94,3 +94,31 @@ class Enrollment(models.Model):
 
     def __str__(self):
         return f"{self.student.name} → {self.course.name if self.course else '—'} ({self.roll_no})"
+
+
+# ── Yeh class models.py ke BILKUL BOTTOM mein add karo ───────────────────────
+
+class CourseAlias(models.Model):
+    """
+    Google Sheet mein aane wale course ke alag-alag naam (aliases) ko
+    ek canonical DB course se map karta hai.
+    Django Admin se manage hota hai — naye alias ke liye koi code change nahi.
+    """
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="aliases",
+    )
+    alias = models.CharField(
+        max_length=200,
+        unique=True,
+        help_text="Sheet mein jo naam aata hai (exact, case-insensitive match hogi)",
+    )
+
+    class Meta:
+        verbose_name        = "Course Alias"
+        verbose_name_plural = "Course Aliases"
+        ordering            = ["alias"]
+
+    def __str__(self):
+        return f"{self.alias}  →  {self.course.name}"

@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
-from .sheet_sync import sync_students_from_sheet
+from .sheet_sync import sync_students_from_sheet, sync_from_details_sheet
 from .models import Student, Course, Enrollment
 from .serializers import StudentSerializer, CourseSerializer, EnrollmentSerializer
 import requests
@@ -11,58 +11,49 @@ from django.http import HttpResponse
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def sync_from_sheet(request):
-    """Admin button dabayega toh sheet se sync hoga"""
+    """Google Form responses sheet se students sync karo"""
     try:
         result = sync_students_from_sheet()
-        return Response(
-            {
-                "message": "Sync successful",
-                "created": result["created"],
-                "updated": result["updated"],  # ← skipped ki jagah updated
-                "skipped": result["skipped"],
-            }
-        )
+        return Response({
+            "message" : "Sync successful",
+            "created" : result["created"],
+            "updated" : result["updated"],
+            "skipped" : result["skipped"],
+            "errors"  : result.get("errors", []),
+        })
     except Exception as e:
         return Response({"error": str(e)}, status=500)
 
 
-@api_view(["GET", "POST"])
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sync_details(request):
+    """
+    Staff wali Admission Details Google Sheet se sync karo.
+    Roll No, Session, Date of Joining, Total Fees, Status → Enrollment update.
+    Naye students bhi create hote hain agar form mein nahi the.
+    """
+    try:
+        result = sync_from_details_sheet()
+        return Response({
+            "message" : "Details sync successful",
+            "created" : result["created"],
+            "updated" : result["updated"],
+            "skipped" : result["skipped"],
+            "errors"  : result.get("errors", []),
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def student_list(request):
-    # ── GET: list students ────────────────────────────────────────────────────
-    if request.method == "GET":
-        status = request.query_params.get("status")
-        students = Student.objects.all().order_by("name")
-        if status:
-            students = students.filter(status=status)
-        serializer = StudentSerializer(students, many=True)
-        return Response(serializer.data)
-
-    # ── POST: create new student + auto-enrollment ────────────────────────────
-    from django.utils import timezone
-
-    serializer = StudentSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response(serializer.errors, status=400)
-
-    student = serializer.save()
-
-    # Auto-create enrollment if course is set
-    course = student.course
-    if course:
-        Enrollment.objects.create(
-            student    = student,
-            course     = course,
-            status     = student.status,
-            start_date = (
-                student.admission_date.date()
-                if student.admission_date
-                else timezone.now().date()
-            ),
-            fee_amount = student.total_fees,
-        )
-
-    return Response(StudentSerializer(student).data, status=201)
+    status = request.query_params.get("status")
+    students = Student.objects.all().order_by("name")
+    if status:
+        students = students.filter(status=status)
+    return Response(StudentSerializer(students, many=True).data)
 
 
 @api_view(["GET", "PATCH"])
@@ -74,93 +65,40 @@ def student_detail(request, pk):
         return Response({"error": "Student not found"}, status=404)
 
     if request.method == "GET":
-        serializer = StudentSerializer(student)
-        return Response(serializer.data)
+        return Response(StudentSerializer(student).data)
 
-    elif request.method == "PATCH":
-        serializer = StudentSerializer(student, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+    serializer = StudentSerializer(student, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=400)
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
-    from .models import Student, Course
-
-    total_students = Student.objects.filter(status="active").count()
-    total_courses = Course.objects.count()
-
-    return Response(
-        {
-            "total_students": total_students,
-            "total_courses": total_courses,
-        }
-    )
+    return Response({
+        "total_students": Student.objects.filter(status="active").count(),
+        "total_courses"  : Course.objects.count(),
+    })
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def course_list(request):
-    """List all courses ordered by name"""
     courses = Course.objects.all().order_by("name")
-    serializer = CourseSerializer(courses, many=True)
-    return Response(serializer.data)
+    return Response(CourseSerializer(courses, many=True).data)
 
 
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def course_update(request, pk):
-    """Partial update a course (fees, duration, fee_type, is_active)"""
     try:
         course = Course.objects.get(pk=pk)
     except Course.DoesNotExist:
         return Response({"error": "Course not found"}, status=404)
 
     serializer = CourseSerializer(course, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data)
-    return Response(serializer.errors, status=400)
-
-
-@api_view(["GET", "POST"])
-@permission_classes([IsAuthenticated])
-def enrollment_list_create(request, pk):
-    """GET: list student enrollments. POST: create new enrollment."""
-    try:
-        student = Student.objects.get(pk=pk)
-    except Student.DoesNotExist:
-        return Response({"error": "Student not found"}, status=404)
-
-    if request.method == "GET":
-        enrollments = Enrollment.objects.filter(student=student).select_related(
-            "course"
-        )
-        serializer = EnrollmentSerializer(enrollments, many=True)
-        return Response(serializer.data)
-
-    # POST — create enrollment
-    data = {**request.data, "student": student.id}
-    serializer = EnrollmentSerializer(data=data)
-    if serializer.is_valid():
-        serializer.save()
-        return Response(serializer.data, status=201)
-    return Response(serializer.errors, status=400)
-
-
-@api_view(["PATCH"])
-@permission_classes([IsAuthenticated])
-def enrollment_update(request, pk):
-    """PATCH: partial update enrollment (status, end_date, note, fee_amount)."""
-    try:
-        enrollment = Enrollment.objects.get(pk=pk)
-    except Enrollment.DoesNotExist:
-        return Response({"error": "Enrollment not found"}, status=404)
-
-    serializer = EnrollmentSerializer(enrollment, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()
         return Response(serializer.data)
@@ -176,32 +114,21 @@ def student_enrollments(request, pk):
         return Response({"error": "Student not found"}, status=404)
 
     if request.method == "GET":
-        from .models import Enrollment
-        from .serializers import EnrollmentSerializer
-
-        enrollments = Enrollment.objects.filter(student=student).select_related(
-            "course"
-        )
+        enrollments = Enrollment.objects.filter(student=student).select_related("course")
         return Response(EnrollmentSerializer(enrollments, many=True).data)
 
-    elif request.method == "POST":
-        from .serializers import EnrollmentSerializer
-
-        data = request.data.copy()
-        data["student"] = pk
-        serializer = EnrollmentSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
+    data = request.data.copy()
+    data["student"] = pk
+    serializer = EnrollmentSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=201)
+    return Response(serializer.errors, status=400)
 
 
 @api_view(["PATCH"])
 @permission_classes([IsAuthenticated])
 def enrollment_update(request, pk):
-    from .models import Enrollment
-    from .serializers import EnrollmentSerializer
-
     try:
         enrollment = Enrollment.objects.get(pk=pk)
     except Enrollment.DoesNotExist:
@@ -214,9 +141,8 @@ def enrollment_update(request, pk):
     return Response(serializer.errors, status=400)
 
 
-# students/views.py
 def proxy_drive_image(request):
     file_id = request.GET.get("id")
-    url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w400"
+    url  = f"https://drive.google.com/thumbnail?id={file_id}&sz=w400"
     resp = requests.get(url)
     return HttpResponse(resp.content, content_type=resp.headers["Content-Type"])
