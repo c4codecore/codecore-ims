@@ -419,7 +419,7 @@ function drawAdBanner(doc, startY) {
   doc.setFontSize(7.5);
   setRGB(doc, [195, 215, 245]);
   doc.text(
-    'DCA  |  ADCA  |  Tally Prime + GST  |  MS Office  |  Web Design  |  Python  |  AutoCAD  |  Photoshop',
+    'DCA  |  ADCA  |  Tally Prime  |  MS Office  |  Web Development  |  Python  |  Data Analytics',
     20, startY + 14.5
   );
 
@@ -427,7 +427,7 @@ function drawAdBanner(doc, startY) {
   doc.setFontSize(7);
   setRGB(doc, [170, 195, 235]);
   doc.text(
-    'Govt. Recognized Certificates   |   100% Placement Support   |   Weekend Batches Available',
+    'Govt. Recognized Certificates   |   100% Job Assistance   |   Full AC Classrooms   |   Wifi Facility',
     20, startY + 20
   );
 

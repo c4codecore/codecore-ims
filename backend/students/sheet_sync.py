@@ -67,7 +67,7 @@ def sync_students_from_sheet():
     rows = sheet.get_all_records()
 
     created = 0
-    updated = 0  # ← skipped ki jagah updated track karenge
+    updated = 0
     skipped = 0
 
     for index, row in enumerate(rows, start=2):
@@ -106,6 +106,10 @@ def sync_students_from_sheet():
                 "synced_at": timezone.now(),
             },
         )
+        print("Student Name", student.name)
+        if student.name =="Neha":
+            print("Course", course.name if course else None)
+            print("Enrollment Exists", Enrollment.objects.filter(student=student, course=course)    )
         if course and not Enrollment.objects.filter(student=student, course=course).exists():
             Enrollment.objects.create(
                 student    = student,

@@ -26,17 +26,43 @@ def sync_from_sheet(request):
         return Response({"error": str(e)}, status=500)
 
 
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAuthenticated])
 def student_list(request):
-    status = request.query_params.get("status")
-    students = Student.objects.all().order_by("name")
-    
-    if status:
-        students = students.filter(status=status)
-    
-    serializer = StudentSerializer(students, many=True)
-    return Response(serializer.data)
+    # ── GET: list students ────────────────────────────────────────────────────
+    if request.method == "GET":
+        status = request.query_params.get("status")
+        students = Student.objects.all().order_by("name")
+        if status:
+            students = students.filter(status=status)
+        serializer = StudentSerializer(students, many=True)
+        return Response(serializer.data)
+
+    # ── POST: create new student + auto-enrollment ────────────────────────────
+    from django.utils import timezone
+
+    serializer = StudentSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=400)
+
+    student = serializer.save()
+
+    # Auto-create enrollment if course is set
+    course = student.course
+    if course:
+        Enrollment.objects.create(
+            student    = student,
+            course     = course,
+            status     = student.status,
+            start_date = (
+                student.admission_date.date()
+                if student.admission_date
+                else timezone.now().date()
+            ),
+            fee_amount = student.total_fees,
+        )
+
+    return Response(StudentSerializer(student).data, status=201)
 
 
 @api_view(["GET", "PATCH"])
@@ -63,21 +89,23 @@ def student_detail(request, pk):
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
     from .models import Student, Course
-    
+
     total_students = Student.objects.filter(status="active").count()
-    total_courses  = Course.objects.count()
-    
-    return Response({
-        "total_students": total_students,
-        "total_courses" : total_courses,
-    })
+    total_courses = Course.objects.count()
+
+    return Response(
+        {
+            "total_students": total_students,
+            "total_courses": total_courses,
+        }
+    )
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def course_list(request):
     """List all courses ordered by name"""
-    courses    = Course.objects.all().order_by("name")
+    courses = Course.objects.all().order_by("name")
     serializer = CourseSerializer(courses, many=True)
     return Response(serializer.data)
 
@@ -108,8 +136,10 @@ def enrollment_list_create(request, pk):
         return Response({"error": "Student not found"}, status=404)
 
     if request.method == "GET":
-        enrollments = Enrollment.objects.filter(student=student).select_related("course")
-        serializer  = EnrollmentSerializer(enrollments, many=True)
+        enrollments = Enrollment.objects.filter(student=student).select_related(
+            "course"
+        )
+        serializer = EnrollmentSerializer(enrollments, many=True)
         return Response(serializer.data)
 
     # POST — create enrollment
@@ -148,11 +178,15 @@ def student_enrollments(request, pk):
     if request.method == "GET":
         from .models import Enrollment
         from .serializers import EnrollmentSerializer
-        enrollments = Enrollment.objects.filter(student=student).select_related("course")
+
+        enrollments = Enrollment.objects.filter(student=student).select_related(
+            "course"
+        )
         return Response(EnrollmentSerializer(enrollments, many=True).data)
 
     elif request.method == "POST":
         from .serializers import EnrollmentSerializer
+
         data = request.data.copy()
         data["student"] = pk
         serializer = EnrollmentSerializer(data=data)
@@ -167,6 +201,7 @@ def student_enrollments(request, pk):
 def enrollment_update(request, pk):
     from .models import Enrollment
     from .serializers import EnrollmentSerializer
+
     try:
         enrollment = Enrollment.objects.get(pk=pk)
     except Enrollment.DoesNotExist:
@@ -178,9 +213,10 @@ def enrollment_update(request, pk):
         return Response(serializer.data)
     return Response(serializer.errors, status=400)
 
+
 # students/views.py
 def proxy_drive_image(request):
-    file_id = request.GET.get('id')
+    file_id = request.GET.get("id")
     url = f"https://drive.google.com/thumbnail?id={file_id}&sz=w400"
     resp = requests.get(url)
-    return HttpResponse(resp.content, content_type=resp.headers['Content-Type'])
+    return HttpResponse(resp.content, content_type=resp.headers["Content-Type"])
