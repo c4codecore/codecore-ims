@@ -131,6 +131,34 @@ def resolve_course(course_raw: str):
     return None
 
 
+def _merge_student_fields(student, row):
+    """
+    Sirf woh fields update karo jo DB mein abhi blank/null hain.
+    Koi bhi existing value kabhi overwrite nahi hogi.
+    Dono sources (Form sheet + Details sheet) ka best data merge ho jaata hai.
+    """
+    changed = False
+    candidates = {
+        "father_name"   : clean(row.get("Father's Name")),
+        "mother_name"   : clean(row.get("Mother's Name")),
+        "photo_url"     : clean(row.get("Student Image")),
+        "address"       : clean(row.get("Full Address")),
+        "qualification" : clean(row.get("Qualification")),
+        "gender"        : clean(row.get("Gender")),
+        "dob"           : parse_date(clean(row.get("Date of Birth"))),
+        "phone"         : clean(row.get("Phone No.") or row.get("Phone number")),
+    }
+    for field, new_val in candidates.items():
+        existing = getattr(student, field, None)
+        # Sirf fill karo agar existing blank/null ho aur naya value ho
+        if new_val and not existing:
+            setattr(student, field, new_val)
+            changed = True
+    if changed:
+        student.synced_at = timezone.now()
+        student.save()
+
+
 def _map_status(raw: str) -> str:
     mapping = {"completed": "completed", "active": "active", "dropped": "dropped", "inactive": "dropped"}
     return mapping.get(raw.lower().strip(), "") if raw else ""
@@ -287,12 +315,11 @@ def sync_from_details_sheet():
 
             course = resolve_course(clean(row.get("Course")))
             try:
-                # Unique placeholder — roll_no ya phone use karo, naam nahi (naam duplicate ho sakta hai)
-                unique_key = roll_no or ''.join(filter(str.isdigit, phone))[-8:] if (roll_no or phone) else name.replace(' ', '_').lower()
+                digits     = ''.join(filter(str.isdigit, phone)) if phone else ""
+                unique_key = roll_no or (digits[-8:] if len(digits) >= 8 else name.replace(' ', '_').lower())
                 safe_email = email or f"noemail_{unique_key}@placeholder.com"
 
-                # update_or_create — agar placeholder email se pehle ban chuka ho toh update karo
-                student, was_created_now = Student.objects.update_or_create(
+                student, was_created_now = Student.objects.get_or_create(
                     email = safe_email,
                     defaults={
                         "name"          : name,
@@ -311,28 +338,17 @@ def sync_from_details_sheet():
                 )
                 if was_created_now:
                     created += 1
-                # agar already tha toh updated count mein jayega enrollment ke saath
+                else:
+                    # Pehle se tha — missing fields fill karo (merge, overwrite nahi)
+                    _merge_student_fields(student, row)
+
             except Exception as e:
                 errors.append({"name": name, "roll_no": roll_no, "error": str(e)})
                 skipped += 1
                 continue
         else:
-            # Existing student — sirf missing fields fill karo (overwrite mat karo)
-            changed = False
-            updates = {
-                "father_name"   : clean(row.get("Father's Name")),
-                "mother_name"   : clean(row.get("Mother's Name")),
-                "photo_url"     : clean(row.get("Student Image")),
-                "address"       : clean(row.get("Full Address")),
-                "dob"           : parse_date(clean(row.get("Date of Birth"))),
-            }
-            for field, val in updates.items():
-                if val and not getattr(student, field):
-                    setattr(student, field, val)
-                    changed = True
-            if changed:
-                student.synced_at = timezone.now()
-                student.save()
+            # Existing student mila — sirf missing fields fill karo (kabhi overwrite nahi)
+            _merge_student_fields(student, row)
 
         # ── Course + Enrollment ───────────────────────────────────────────────
         course       = resolve_course(clean(row.get("Course"))) or student.course
