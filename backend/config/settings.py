@@ -51,7 +51,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "../frontend/dist"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -121,9 +121,11 @@ SIMPLE_JWT = {
 # CORS
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "http://localhost:5174", 
+    "http://localhost:5174",
     "http://127.0.0.1:5173",
-    "http://127.0.0.1:5174",  
+    "http://127.0.0.1:5174",
+    "http://192.168.1.7:5173",
+    "http://192.168.1.7:8000",
 ]
 
 SIMPLE_JWT = {
@@ -144,3 +146,10 @@ EMAIL_USE_TLS       = True
 EMAIL_HOST_USER     = config('EMAIL_HOST_USER',     default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL  = f'CodeCore IMS <{config("EMAIL_HOST_USER", default="noreply@codecore.in")}>'
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "../frontend/dist/assets"]
+
+MEDIA_URL  = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
