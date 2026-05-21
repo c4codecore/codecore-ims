@@ -84,3 +84,67 @@ def attendance_summary(request):
         "leave"     : leave,
         "percentage": percentage,
     })
+
+
+from django.db.models import Count, Q
+from datetime import date as date_type
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def attendance_monthly_report(request):
+    """
+    Ek hi call mein sab students ki monthly attendance summary
+    ?month=2026-05  (default: current month)
+    """
+    month_param = request.query_params.get("month")  # "2026-05"
+    
+    if month_param:
+        year, month = map(int, month_param.split("-"))
+    else:
+        today = date_type.today()
+        year, month = today.year, today.month
+
+    qs = Attendance.objects.filter(
+        date__year=year,
+        date__month=month,
+        student__status="active"
+    ).select_related("student", "student__course")
+
+    # Student-wise aggregate
+    from collections import defaultdict
+    student_map = {}
+    
+    for record in qs:
+        sid = record.student.id
+        if sid not in student_map:
+            student_map[sid] = {
+                "student_id": sid,
+                "student_name": record.student.name,
+                "course_name": record.student.course.name if record.student.course else "—",
+                "present": 0, "absent": 0, "leave": 0,
+            }
+        student_map[sid][record.status] += 1
+
+    # Percentage calculate karo
+    result = []
+    for s in student_map.values():
+        total = s["present"] + s["absent"] + s["leave"]
+        s["total"] = total
+        s["percentage"] = round((s["present"] / total * 100), 1) if total > 0 else 0
+        result.append(s)
+
+    # Daily trend — last 30 days of this month
+    daily = Attendance.objects.filter(
+        date__year=year,
+        date__month=month,
+    ).values("date").annotate(
+        present=Count("id", filter=Q(status="present")),
+        absent=Count("id", filter=Q(status="absent")),
+        leave=Count("id", filter=Q(status="leave")),
+    ).order_by("date")
+
+    return Response({
+        "month": f"{year}-{str(month).zfill(2)}",
+        "students": result,
+        "daily_trend": list(daily),
+    })

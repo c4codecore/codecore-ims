@@ -62,7 +62,7 @@ function SyncResultModal({ open, onClose, result, type }) {
   if (!open || !result) return null;
 
   const isDetails = type === "details";
-  const title     = isDetails ? "Admission Details Sync" : "Form Sheet Sync";
+  const title = isDetails ? "Admission Details Sync" : "Form Sheet Sync";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -84,8 +84,8 @@ function SyncResultModal({ open, onClose, result, type }) {
         <div className="px-5 py-4 grid grid-cols-3 gap-3">
           {[
             { label: isDetails ? "Updated" : "Created", value: isDetails ? result.updated : result.created, color: "text-green-600", bg: "bg-green-50 dark:bg-green-950/30" },
-            { label: isDetails ? "Created" : "Updated", value: isDetails ? result.created : result.updated, color: "text-blue-600",  bg: "bg-blue-50 dark:bg-blue-950/30"  },
-            { label: "Skipped",                          value: result.skipped,                              color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/30" },
+            { label: isDetails ? "Created" : "Updated", value: isDetails ? result.created : result.updated, color: "text-blue-600", bg: "bg-blue-50 dark:bg-blue-950/30" },
+            { label: "Skipped", value: result.skipped, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/30" },
           ].map(({ label, value, color, bg }) => (
             <div key={label} className={cn("rounded-lg p-3 text-center", bg)}>
               <div className={cn("text-2xl font-bold", color)}>{value ?? 0}</div>
@@ -144,14 +144,14 @@ const EMPTY_FORM = {
 
 function AddStudentModal({ open, onClose, onSuccess }) {
   const { toast } = useToast();
-  const [form, setForm]     = useState(EMPTY_FORM);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [courses, setCourses] = useState([]);
-  const [saving, setSaving]   = useState(false);
-  const [errors, setErrors]   = useState({});
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (!open) return;
-    api.get("/api/students/courses/").then(({ data }) => setCourses(data)).catch(() => {});
+    api.get("/api/students/courses/").then(({ data }) => setCourses(data)).catch(() => { });
   }, [open]);
 
   useEffect(() => {
@@ -165,7 +165,7 @@ function AddStudentModal({ open, onClose, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const req  = { name: "Name", phone: "Phone", email: "Email", gender: "Gender" };
+    const req = { name: "Name", phone: "Phone", email: "Email", gender: "Gender" };
     const errs = {};
     Object.entries(req).forEach(([k, label]) => {
       if (!form[k].trim()) errs[k] = `${label} required`;
@@ -176,10 +176,10 @@ function AddStudentModal({ open, onClose, onSuccess }) {
     try {
       const payload = {
         ...form,
-        course        : form.course || null,
+        course: form.course || null,
         admission_date: form.admission_date || null,
-        total_fees    : form.total_fees || null,
-        dob           : form.dob || null,
+        total_fees: form.total_fees || null,
+        dob: form.dob || null,
       };
       await api.post("/api/students/", payload);
       toast({ type: "success", title: "Student added!", description: `${form.name} ka record ban gaya.`, duration: 4000 });
@@ -312,17 +312,16 @@ export default function Students() {
   const { toast } = useToast();
 
   const [statusFilter, setStatusFilter] = useState("active");
-  const [students, setStudents]         = useState([]);
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState("");
-  const [syncing, setSyncing]           = useState(false);
-  const [syncingDetails, setSyncingDetails] = useState(false);
-  const [search, setSearch]             = useState("");
-  const [sortConfig, setSortConfig]     = useState({ field: "name", dir: "asc" });
+  const [students, setStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sortConfig, setSortConfig] = useState({ field: "name", dir: "asc" });
   const [showAddModal, setShowAddModal] = useState(false);
 
-  // Sync result modal
-  const [syncResult, setSyncResult]     = useState(null);
+  // Sync result modal (kept for single-sheet results; combined sync uses toast)
+  const [syncResult, setSyncResult] = useState(null);
   const [syncResultType, setSyncResultType] = useState(null);
 
   const PAGE_SIZE = 15;
@@ -345,33 +344,25 @@ export default function Students() {
   useEffect(() => { fetchStudents(); }, [statusFilter]);
   useEffect(() => { setPage(1); }, [search]);
 
-  // ── Sync: Form Sheet ────────────────────────────────────────────────────────
-  const handleSync = async () => {
+  // ── Sync: Combined (Form + Details) ─────────────────────────────────────────
+  const handleSyncAll = async () => {
     setSyncing(true);
     try {
-      const { data } = await api.post("/api/students/sync/");
-      setSyncResult(data);
-      setSyncResultType("form");
+      const { data } = await api.post("/api/students/sync-all/");
+      // Show concise toast summary
+      const f = data.form_sheet || {};
+      const d = data.details_sheet || {};
+      toast({
+        type: "success",
+        title: "Sync complete",
+        description: `Form: ${f.created ?? 0} created, ${f.updated ?? 0} updated | Details: ${d.updated ?? 0} updated, ${d.skipped ?? 0} skipped`,
+        duration: 6000,
+      });
       await fetchStudents();
     } catch (err) {
       toast({ type: "error", title: "Sync failed", description: err.response?.data?.error ?? "Could not sync.", duration: 5000 });
     } finally {
       setSyncing(false);
-    }
-  };
-
-  // ── Sync: Admission Details Sheet ───────────────────────────────────────────
-  const handleSyncDetails = async () => {
-    setSyncingDetails(true);
-    try {
-      const { data } = await api.post("/api/students/sync-details/");
-      setSyncResult(data);
-      setSyncResultType("details");
-      await fetchStudents();
-    } catch (err) {
-      toast({ type: "error", title: "Details sync failed", description: err.response?.data?.error ?? "Could not sync details.", duration: 5000 });
-    } finally {
-      setSyncingDetails(false);
     }
   };
 
@@ -386,34 +377,34 @@ export default function Students() {
     const q = search.toLowerCase().trim();
     let rows = q
       ? students.filter((s) =>
-          s.name?.toLowerCase().includes(q) ||
-          s.phone?.toLowerCase().includes(q) ||
-          s.father_name?.toLowerCase().includes(q)
-        )
+        s.name?.toLowerCase().includes(q) ||
+        s.phone?.toLowerCase().includes(q) ||
+        s.father_name?.toLowerCase().includes(q)
+      )
       : students;
     rows = [...rows].sort((a, b) => {
       const aVal = sortConfig.field === "course" ? (a.course_name ?? "") : (a[sortConfig.field] ?? "");
       const bVal = sortConfig.field === "course" ? (b.course_name ?? "") : (b[sortConfig.field] ?? "");
-      const cmp  = String(aVal).localeCompare(String(bVal), undefined, { numeric: true });
+      const cmp = String(aVal).localeCompare(String(bVal), undefined, { numeric: true });
       return sortConfig.dir === "asc" ? cmp : -cmp;
     });
     return rows;
   }, [students, search, sortConfig]);
 
   const totalPages = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
-  const paginated  = processed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const paginated = processed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const counts = useMemo(() => {
     const all = search ? processed : students;
     return {
-      total:     all.length,
-      active:    all.filter((s) => s.status === "active").length,
+      total: all.length,
+      active: all.filter((s) => s.status === "active").length,
       completed: all.filter((s) => s.status === "completed").length,
-      dropped:   all.filter((s) => s.status === "dropped").length,
+      dropped: all.filter((s) => s.status === "dropped").length,
     };
   }, [students, processed, search]);
 
-  const anySyncing = syncing || syncingDetails;
+  const anySyncing = syncing;
 
   return (
     <>
@@ -421,7 +412,7 @@ export default function Students() {
 
       <SyncResultModal
         open={!!syncResult}
-        onClose={() => setSyncResult(null)}
+        onClose={() => { setSyncResult(null); setSyncResultType(null); }}
         result={syncResult}
         type={syncResultType}
       />
@@ -440,17 +431,9 @@ export default function Students() {
               Refresh
             </Button>
 
-            {/* Form Sheet Sync */}
-            <Button variant="outline" size="sm" onClick={handleSync} disabled={anySyncing || loading} className="gap-1.5">
-              {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <Sheet className="size-3.5" />}
-              {syncing ? "Syncing…" : "Sync Form Sheet"}
-            </Button>
-
-            {/* Admission Details Sync — NAYA */}
-            <Button variant="outline" size="sm" onClick={handleSyncDetails} disabled={anySyncing || loading}
-              className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40">
-              {syncingDetails ? <Loader2 className="size-3.5 animate-spin" /> : <Sheet className="size-3.5" />}
-              {syncingDetails ? "Syncing Details…" : "Sync Admission Details"}
+            <Button variant="outline" size="sm" onClick={handleSyncAll} disabled={anySyncing || loading} className="gap-1.5">
+              {syncing ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+              {syncing ? "Syncing…" : "Sync"}
             </Button>
 
             <Button size="sm" onClick={() => setShowAddModal(true)} className="gap-1.5">
@@ -463,10 +446,10 @@ export default function Students() {
         {/* Stat pills */}
         <div className="flex flex-wrap gap-2">
           {[
-            { label: "Total",     value: counts.total,     variant: "default"     },
-            { label: "Active",    value: counts.active,    variant: "success"     },
-            { label: "Completed", value: counts.completed, variant: "info"        },
-            { label: "Dropped",   value: counts.dropped,   variant: "destructive" },
+            { label: "Total", value: counts.total, variant: "default" },
+            { label: "Active", value: counts.active, variant: "success" },
+            { label: "Completed", value: counts.completed, variant: "info" },
+            { label: "Dropped", value: counts.dropped, variant: "destructive" },
           ].map(({ label, value, variant }) => (
             <Badge key={label} variant={variant} className="gap-1.5 px-3 py-1 text-xs">
               <Users className="size-3" />
@@ -480,10 +463,10 @@ export default function Students() {
           {/* Filter Tabs */}
           <div className="flex gap-1 border-b border-border px-4 pt-3">
             {[
-              { label: "Active",    value: "active",    count: counts.active    },
+              { label: "Active", value: "active", count: counts.active },
               { label: "Completed", value: "completed", count: counts.completed },
-              { label: "Dropped",   value: "dropped",   count: counts.dropped   },
-              { label: "All",       value: "",          count: counts.total     },
+              { label: "Dropped", value: "dropped", count: counts.dropped },
+              { label: "All", value: "", count: counts.total },
             ].map(({ label, value, count }) => (
               <button
                 key={value}
@@ -550,12 +533,12 @@ export default function Students() {
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-10 text-center">#</TableHead>
-                  <SortableHead label="Name"        field="name"        sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHead label="Name" field="name" sortConfig={sortConfig} onSort={handleSort} />
                   <SortableHead label="Father Name" field="father_name" sortConfig={sortConfig} onSort={handleSort} className="hidden lg:table-cell" />
-                  <SortableHead label="Phone"       field="phone"       sortConfig={sortConfig} onSort={handleSort} className="hidden sm:table-cell" />
-                  <SortableHead label="Course"      field="course"      sortConfig={sortConfig} onSort={handleSort} />
-                  <SortableHead label="Join Date"   field="join_date"   sortConfig={sortConfig} onSort={handleSort} className="hidden md:table-cell" />
-                  <SortableHead label="Status"      field="status"      sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHead label="Phone" field="phone" sortConfig={sortConfig} onSort={handleSort} className="hidden sm:table-cell" />
+                  <SortableHead label="Course" field="course" sortConfig={sortConfig} onSort={handleSort} />
+                  <SortableHead label="Join Date" field="join_date" sortConfig={sortConfig} onSort={handleSort} className="hidden md:table-cell" />
+                  <SortableHead label="Status" field="status" sortConfig={sortConfig} onSort={handleSort} />
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -23,6 +23,8 @@ COURSE_ALIAS_MAP = {
     "c language"                                             : "Certificate in Programming Language",
     "python programming"                                     : "Certificate in Programming Language",
     "python"                                                 : "Certificate in Programming Language",
+    "javascript"                                             : "Certificate in Programming Language",
+    "js"                                                     : "Certificate in Programming Language",
     "certificate in data analytics"                          : "Certificate in Data Analytics",
     "certificate in analyzing data with microsoft power bi"  : "Certificate in Data Analytics",
     "data analytics"                                         : "Certificate in Data Analytics",
@@ -268,7 +270,7 @@ def sync_from_details_sheet():
     sheet      = get_details_sheet()
     all_values = sheet.get_all_values()
 
-    # Blank row ke baad header row dhundo
+    # Header row dhundo
     header_row_idx = None
     for i, row in enumerate(all_values):
         if any("Roll No" in str(cell) or "Sr. No" in str(cell) for cell in row):
@@ -298,17 +300,42 @@ def sync_from_details_sheet():
         phone   = clean(row.get("Phone No."))
         roll_no = clean(row.get("Roll No."))
 
-        # ── Student dhundo (email → phone → naam) ────────────────────────────
+        # ── Student dhundo (4 levels) ─────────────────────────────────────────
+
         student = None
+
+        # 1. Email se — sabse reliable
         if email:
             student = Student.objects.filter(email__iexact=email).first()
+
+        # 2. Phone se — last 8 digits match
         if not student and phone:
             digits = ''.join(c for c in phone if c.isdigit())
             if len(digits) >= 8:
                 student = Student.objects.filter(phone__endswith=digits[-8:]).first()
 
+        # 3. Name (first word) + DOB + Father's Name — teeno saath hone chahiye
+        if not student and name:
+            dob_val = parse_date(clean(row.get("Date of Birth")))
+            father  = clean(row.get("Father's Name"))
+            if dob_val and father:
+                first_name = name.strip().split()[0].lower()
+                for s in Student.objects.filter(
+                    dob=dob_val,
+                    father_name__iexact=father.strip()
+                ):
+                    if s.name.strip().split()[0].lower() == first_name:
+                        student = s
+                        break
+
+        # 4. Roll No. se — enrollment mein already assigned ho
+        if not student and roll_no:
+            enr = Enrollment.objects.filter(roll_no=roll_no).first()
+            if enr:
+                student = enr.student
+
+        # ── Student nahi mila — naya banao ───────────────────────────────────
         if not student:
-            # Form mein nahi tha — naya student banao
             if not name:
                 skipped += 1
                 continue
@@ -320,7 +347,7 @@ def sync_from_details_sheet():
                 safe_email = email or f"noemail_{unique_key}@placeholder.com"
 
                 student, was_created_now = Student.objects.get_or_create(
-                    email = safe_email,
+                    email=safe_email,
                     defaults={
                         "name"          : name,
                         "phone"         : phone,
@@ -339,15 +366,15 @@ def sync_from_details_sheet():
                 if was_created_now:
                     created += 1
                 else:
-                    # Pehle se tha — missing fields fill karo (merge, overwrite nahi)
                     _merge_student_fields(student, row)
 
             except Exception as e:
                 errors.append({"name": name, "roll_no": roll_no, "error": str(e)})
                 skipped += 1
                 continue
+
         else:
-            # Existing student mila — sirf missing fields fill karo (kabhi overwrite nahi)
+            # Mila — sirf missing fields fill karo, overwrite nahi
             _merge_student_fields(student, row)
 
         # ── Course + Enrollment ───────────────────────────────────────────────
@@ -357,7 +384,7 @@ def sync_from_details_sheet():
         status_raw   = clean(row.get("Status"))
         session_raw  = clean(row.get("Session"))
 
-        # Enrollment dhundo
+        # Enrollment dhundo — course match karo, warna akela enrollment lo
         enrollment = None
         if course:
             enrollment = Enrollment.objects.filter(student=student, course=course).first()
@@ -370,8 +397,9 @@ def sync_from_details_sheet():
             enroll_changed = False
 
             if roll_no and enrollment.roll_no != roll_no:
-                # Pehle check karo ki yeh roll_no kisi aur enrollment mein toh nahi
-                roll_no_taken = Enrollment.objects.filter(roll_no=roll_no).exclude(pk=enrollment.pk).exists()
+                roll_no_taken = Enrollment.objects.filter(
+                    roll_no=roll_no
+                ).exclude(pk=enrollment.pk).exists()
                 if not roll_no_taken:
                     enrollment.roll_no = roll_no
                     enroll_changed = True
@@ -405,7 +433,6 @@ def sync_from_details_sheet():
         else:
             # Enrollment nahi thi — banao
             if course:
-                # roll_no unique check
                 safe_roll_no = None
                 if roll_no and not Enrollment.objects.filter(roll_no=roll_no).exists():
                     safe_roll_no = roll_no

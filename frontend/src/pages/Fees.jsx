@@ -1,4 +1,3 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
 import api from "@/api/axios";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -20,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { generateReceiptPDF, generateReceiptPDFBase64 } from '@/lib/generateReceipt';
 import { Download, Mail, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt(amount) {
@@ -33,6 +33,9 @@ function todayISO() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+
+
 
 // Fees.jsx ke top mein — logo + stamp dono load karo
 function useAssetBase64(src) {
@@ -633,6 +636,8 @@ export default function Fees() {
   const [error, setError] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
+  const [activeStudents, setActiveStudents] = useState(null);
+  const [activeStudLoading, setActiveStudLoading] = useState(true);
 
   const fetchFees = useCallback(async () => {
     setLoading(true);
@@ -659,18 +664,60 @@ export default function Fees() {
     }
   }, []);
 
+  const fetchActiveStudents = useCallback(async () => {
+    setActiveStudLoading(true);
+    try {
+      const { data } = await api.get("/api/students/?status=active");
+      const list = Array.isArray(data) ? data : (data.results ?? []);
+      setActiveStudents(list.length);
+    } catch {
+      setActiveStudents(null);
+    } finally {
+      setActiveStudLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchFees();
     fetchSummary();
+    fetchActiveStudents();
   }, []);
 
-  const handleRefresh = () => { fetchFees(); fetchSummary(); };
+  const handleRefresh = () => { fetchFees(); fetchSummary(); fetchActiveStudents(); };
+
+  const monthlyReceived = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    let total = 0;
+    fees.forEach(fee => {
+      (fee.payments ?? []).forEach(p => {
+        const d = new Date(p.payment_date);
+        if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+          total += Number(p.amount) || 0;
+        }
+      });
+    });
+    return total;
+  }, [fees]);
+
+  const monthName = new Date().toLocaleString("en-IN", { month: "long" });
 
   const summaryCards = [
-    { label: "Total Final Fee", value: summary ? fmt(summary.total_final_fee) : "—", icon: CircleDollarSign, colorClass: "text-blue-500 bg-blue-500/10" },
-    { label: "Total Collected", value: summary ? fmt(summary.total_paid) : "—", icon: CheckCircle2, colorClass: "text-emerald-500 bg-emerald-500/10" },
-    { label: "Total Balance", value: summary ? fmt(summary.total_balance) : "—", icon: Wallet, colorClass: "text-rose-500 bg-rose-500/10" },
-    { label: "Total Students", value: summary?.total_students ?? "—", icon: CircleDollarSign, colorClass: "text-amber-500 bg-amber-500/10" },
+    {
+      label: `${monthName} Received`,
+      value: loading ? "—" : fmt(monthlyReceived),
+      icon: CheckCircle2,
+      colorClass: "text-emerald-500 bg-emerald-500/10",
+      loading: loading,
+    },
+    {
+      label: "Active Students",
+      value: activeStudents ?? "—",
+      icon: CircleDollarSign,
+      colorClass: "text-blue-500 bg-blue-500/10",
+      loading: activeStudLoading,
+    },
   ];
 
   return (
@@ -692,7 +739,7 @@ export default function Fees() {
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {summaryCards.map(card => (
           <SummaryCard key={card.label} {...card} loading={summLoading} />
         ))}
@@ -744,9 +791,8 @@ export default function Fees() {
             </TableHeader>
             <TableBody>
               {fees.map((fee, idx) => (
-                <>
+                <React.Fragment key={fee.id}>
                   <TableRow
-                    key={fee.id}
                     className={cn("transition-colors cursor-pointer hover:bg-muted/60",
                       expandedId === fee.id && "bg-muted/40")}
                     onClick={() => setExpandedId(expandedId === fee.id ? null : fee.id)}
@@ -801,7 +847,7 @@ export default function Fees() {
                       </TableCell>
                     </TableRow>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>

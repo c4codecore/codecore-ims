@@ -43,7 +43,7 @@ class Student(models.Model):
     qualification      = models.CharField(max_length=100)
     address            = models.TextField()
     phone              = models.CharField(max_length=15)
-    email              = models.EmailField(unique=True)
+    email              = models.EmailField(unique=True, blank=True, null=True)
     aadhaar_number     = models.CharField(max_length=20, blank=True)
 
     # Google Drive links (Form se aate hain)

@@ -46,6 +46,31 @@ def sync_details(request):
         return Response({"error": str(e)}, status=500)
 
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def sync_all(request):
+    """Run form sheet sync followed by admission details sync and return combined results."""
+    try:
+        form_res = sync_students_from_sheet()
+        details_res = sync_from_details_sheet()
+        return Response({
+            "form_sheet": {
+                "created": form_res.get("created", 0),
+                "updated": form_res.get("updated", 0),
+                "skipped": form_res.get("skipped", 0),
+                "errors": form_res.get("errors", []),
+            },
+            "details_sheet": {
+                "created": details_res.get("created", 0),
+                "updated": details_res.get("updated", 0),
+                "skipped": details_res.get("skipped", 0),
+                "errors": details_res.get("errors", []),
+            }
+        })
+    except Exception as e:
+        return Response({"error": str(e)}, status=500)
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def student_list(request):

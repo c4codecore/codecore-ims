@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path("sync/",                  views.sync_from_sheet,     name="sync-sheet"),
+    path("sync-all/",              views.sync_all,            name="sync-all"),
     path("sync-details/",          views.sync_details,        name="sync-details"),       # ← NAYA
     path("",                       views.student_list,        name="student-list"),
     path("<int:pk>/",              views.student_detail,      name="student-detail"),
