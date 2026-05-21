@@ -267,10 +267,15 @@ def sync_from_details_sheet():
     Mother's Name | Qualification | Student Image | Date of Birth |
     Full Address | Phone No. | Email | Date OF Joining | Total Fees | Status
     """
-    sheet      = get_details_sheet()
-    all_values = sheet.get_all_values()
 
-    # Header row dhundo
+    # ──────────────────────────────────────────────────────────────────────────
+    # STEP 1: Google Sheet se saara data fetch karo
+    # ──────────────────────────────────────────────────────────────────────────
+    sheet      = get_details_sheet()
+    all_values = sheet.get_all_values()  # 2D list — [[row1_col1, row1_col2...], [row2...], ...]
+
+    # Header row dhundo (jis row mein "Roll No" ya "Sr. No" ho)
+    # Ye zaruri hai kyunki sheet ke upar extra rows ho sakti hain (title, blank, etc.)
     header_row_idx = None
     for i, row in enumerate(all_values):
         if any("Roll No" in str(cell) or "Sr. No" in str(cell) for cell in row):
@@ -280,41 +285,57 @@ def sync_from_details_sheet():
     if header_row_idx is None:
         raise ValueError("Header row nahi mili 'Student Details' sheet mein")
 
+    # Headers ki list banao (index-wise), aur actual data rows alag karo
     headers   = [str(h).strip() for h in all_values[header_row_idx]]
-    data_rows = all_values[header_row_idx + 1:]
+    data_rows = all_values[header_row_idx + 1:]  # Header ke neeche ki saari rows
 
-    created = 0
-    updated = 0
-    skipped = 0
-    errors  = []
+    # ──────────────────────────────────────────────────────────────────────────
+    # STEP 2: Counters initialize karo — sync result ke liye
+    # ──────────────────────────────────────────────────────────────────────────
+    created = 0   # Naye students jo DB mein add hue
+    updated = 0   # Existing enrollments jo update hue / naye enrollments bane
+    skipped = 0   # Rows jo process nahi hui (blank / koi match nahi / koi change nahi)
+    errors  = []  # Rows jo exception ki wajah se fail huin
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # STEP 3: Har data row process karo
+    # ──────────────────────────────────────────────────────────────────────────
     for row_values in data_rows:
+
+        # Row ko dict mein convert karo: {"Sr. No.": "1", "Name": "Amit", ...}
+        # Agar row mein headers se kam columns hain toh empty string daal do
         row = {headers[i]: (row_values[i] if i < len(row_values) else "") for i in range(len(headers))}
 
-        # Blank rows skip
+        # Blank row check — "Sr. No." empty hai toh ye row skip karo
         if not clean(row.get("Sr. No.")):
             continue
 
+        # Row se key fields nikalo
         name    = clean(row.get("Name"))
         email   = clean(row.get("Email"))
         phone   = clean(row.get("Phone No."))
         roll_no = clean(row.get("Roll No."))
 
-        # ── Student dhundo (4 levels) ─────────────────────────────────────────
-
+        # ══════════════════════════════════════════════════════════════════════
+        # STEP 4: Existing student dhundo — 4 levels mein (priority order)
+        # Goal: sheet ki row ko DB ke student se match karo
+        # ══════════════════════════════════════════════════════════════════════
         student = None
 
-        # 1. Email se — sabse reliable
+        # Level 1 — Email se match (sabse reliable, unique hoti hai)
         if email:
             student = Student.objects.filter(email__iexact=email).first()
 
-        # 2. Phone se — last 8 digits match
+        # Level 2 — Phone ke last 8 digits se match
+        # (same person different formatting: +91-98765-43210 vs 9876543210)
         if not student and phone:
             digits = ''.join(c for c in phone if c.isdigit())
             if len(digits) >= 8:
                 student = Student.objects.filter(phone__endswith=digits[-8:]).first()
 
-        # 3. Name (first word) + DOB + Father's Name — teeno saath hone chahiye
+        # Level 3 — First name + DOB + Father's Name teeno saath match karo
+        # Sirf tab use karo jab email aur phone dono nahi mile
+        # Teeno fields mandatory hain — akele naam kaafi nahi (common names hote hain)
         if not student and name:
             dob_val = parse_date(clean(row.get("Date of Birth")))
             father  = clean(row.get("Father's Name"))
@@ -328,24 +349,34 @@ def sync_from_details_sheet():
                         student = s
                         break
 
-        # 4. Roll No. se — enrollment mein already assigned ho
+        # Level 4 — Roll No. se match (enrollment mein already assigned ho)
+        # Last resort — sirf tab jab baaki teen levels fail ho jaayein
         if not student and roll_no:
             enr = Enrollment.objects.filter(roll_no=roll_no).first()
             if enr:
                 student = enr.student
 
-        # ── Student nahi mila — naya banao ───────────────────────────────────
+        # ══════════════════════════════════════════════════════════════════════
+        # STEP 5: Agar student DB mein nahi mila — naya student banao
+        # ══════════════════════════════════════════════════════════════════════
         if not student:
+
+            # Name bhi nahi hai toh kuch nahi kar sakte — skip
             if not name:
                 skipped += 1
                 continue
 
             course = resolve_course(clean(row.get("Course")))
+
             try:
+                # Email nahi hai toh placeholder email banao
+                # (DB mein email unique field hai, toh kuch toh chahiye)
                 digits     = ''.join(filter(str.isdigit, phone)) if phone else ""
                 unique_key = roll_no or (digits[-8:] if len(digits) >= 8 else name.replace(' ', '_').lower())
                 safe_email = email or f"noemail_{unique_key}@placeholder.com"
 
+                # get_or_create: agar safe_email se student mila toh wahi lo,
+                # nahi mila toh defaults se naya banao
                 student, was_created_now = Student.objects.get_or_create(
                     email=safe_email,
                     defaults={
@@ -363,9 +394,11 @@ def sync_from_details_sheet():
                         "synced_at"     : timezone.now(),
                     },
                 )
+
                 if was_created_now:
-                    created += 1
+                    created += 1  # Bilkul naya student bana
                 else:
+                    # Student mila placeholder email se — missing fields fill karo
                     _merge_student_fields(student, row)
 
             except Exception as e:
@@ -374,28 +407,49 @@ def sync_from_details_sheet():
                 continue
 
         else:
-            # Mila — sirf missing fields fill karo, overwrite nahi
+            # ──────────────────────────────────────────────────────────────────
+            # STEP 5b: Student mila — sirf blank fields fill karo
+            # Existing data kabhi overwrite nahi hoga (merge strategy)
+            # ──────────────────────────────────────────────────────────────────
             _merge_student_fields(student, row)
 
-        # ── Course + Enrollment ───────────────────────────────────────────────
+        # ══════════════════════════════════════════════════════════════════════
+        # STEP 6: Course resolve karo aur Enrollment dhundo / banao
+        # ══════════════════════════════════════════════════════════════════════
+
+        # Sheet ka course → DB Course object
+        # Fallback: agar sheet mein course nahi toh student ka existing course use karo
         course       = resolve_course(clean(row.get("Course"))) or student.course
         joining_date = parse_date(clean(row.get("Date OF Joining") or row.get("Date of Joining")))
         total_fees   = _parse_number(row.get("Total Fees"))
         status_raw   = clean(row.get("Status"))
         session_raw  = clean(row.get("Session"))
 
-        # Enrollment dhundo — course match karo, warna akela enrollment lo
+        # ── Enrollment dhundo ─────────────────────────────────────────────────
+
         enrollment = None
+
+        # Priority 1: student + course dono match karo (exact enrollment)
         if course:
             enrollment = Enrollment.objects.filter(student=student, course=course).first()
+
+        # Priority 2 (DANGER ZONE): Agar course match nahi aur student ki sirf
+        # 1 enrollment hai toh wahi le lo
+        # ⚠️ PROBLEM: Multi-course students ke liye ye galat enrollment update kar sakta hai!
+        # Example: Amit ke paas DCA enrollment hai, Programming Language row aaya,
+        #          course resolve nahi hua → ye DCA enrollment ko update karega ❌
         if not enrollment:
             all_enr = Enrollment.objects.filter(student=student)
             if all_enr.count() == 1:
                 enrollment = all_enr.first()
 
+        # ══════════════════════════════════════════════════════════════════════
+        # STEP 7: Enrollment mili — update karo (sirf blank fields)
+        # ══════════════════════════════════════════════════════════════════════
         if enrollment:
             enroll_changed = False
 
+            # Roll No. assign karo — par pehle check karo kisi aur ki toh nahi
             if roll_no and enrollment.roll_no != roll_no:
                 roll_no_taken = Enrollment.objects.filter(
                     roll_no=roll_no
@@ -404,20 +458,24 @@ def sync_from_details_sheet():
                     enrollment.roll_no = roll_no
                     enroll_changed = True
 
+            # Start date sirf tab set karo jab abhi blank ho
             if joining_date and not enrollment.start_date:
                 enrollment.start_date = joining_date
                 enroll_changed = True
 
+            # Fee amount sirf tab set karo jab abhi blank ho
             if total_fees and not enrollment.fee_amount:
                 enrollment.fee_amount = total_fees
                 enroll_changed = True
 
+            # Session (batch number) sirf tab set karo jab abhi blank ho
             if session_raw and not enrollment.session:
                 parsed_session = _parse_session(session_raw)
                 if parsed_session:
                     enrollment.session = parsed_session
                     enroll_changed = True
 
+            # Status update karo agar sheet mein valid status hai aur alag hai
             if status_raw:
                 mapped_status = _map_status(status_raw)
                 if mapped_status and enrollment.status != mapped_status:
@@ -428,14 +486,18 @@ def sync_from_details_sheet():
                 enrollment.save()
                 updated += 1
             else:
-                skipped += 1
+                skipped += 1  # Enrollment mili par kuch change nahi tha
 
+        # ══════════════════════════════════════════════════════════════════════
+        # STEP 8: Enrollment nahi mili — naya enrollment banao
+        # ══════════════════════════════════════════════════════════════════════
         else:
-            # Enrollment nahi thi — banao
             if course:
+                # Roll No. duplicate nahi hona chahiye — check karo
                 safe_roll_no = None
                 if roll_no and not Enrollment.objects.filter(roll_no=roll_no).exists():
                     safe_roll_no = roll_no
+
                 Enrollment.objects.create(
                     student    = student,
                     course     = course,
@@ -447,6 +509,7 @@ def sync_from_details_sheet():
                 )
                 updated += 1
             else:
+                # Course bhi nahi mila — kuch nahi kar sakte, skip
                 skipped += 1
 
     return {"created": created, "updated": updated, "skipped": skipped, "errors": errors}
