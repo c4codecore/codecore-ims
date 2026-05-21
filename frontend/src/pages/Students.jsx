@@ -328,20 +328,18 @@ export default function Students() {
   const [page, setPage] = useState(1);
 
   const fetchStudents = async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const url = statusFilter ? `/api/students/?status=${statusFilter}` : "/api/students/";
-      const { data } = await api.get(url);
-      setStudents(Array.isArray(data) ? data : (data.results ?? []));
-    } catch (err) {
-      setError(err.response?.data?.detail ?? "Failed to load students.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchStudents(); }, [statusFilter]);
+  setLoading(true);
+  setError("");
+  try {
+    const { data } = await api.get("/api/students/"); // ← hamesha all fetch karo
+    setStudents(Array.isArray(data) ? data : (data.results ?? []));
+  } catch (err) {
+    setError(err.response?.data?.detail ?? "Failed to load students.");
+  } finally {
+    setLoading(false);
+  }
+};
+  useEffect(() => { fetchStudents(); }, []);
   useEffect(() => { setPage(1); }, [search]);
 
   // ── Sync: Combined (Form + Details) ─────────────────────────────────────────
@@ -374,35 +372,43 @@ export default function Students() {
   };
 
   const processed = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    let rows = q
-      ? students.filter((s) =>
-        s.name?.toLowerCase().includes(q) ||
-        s.phone?.toLowerCase().includes(q) ||
-        s.father_name?.toLowerCase().includes(q)
-      )
-      : students;
-    rows = [...rows].sort((a, b) => {
-      const aVal = sortConfig.field === "course" ? (a.course_name ?? "") : (a[sortConfig.field] ?? "");
-      const bVal = sortConfig.field === "course" ? (b.course_name ?? "") : (b[sortConfig.field] ?? "");
-      const cmp = String(aVal).localeCompare(String(bVal), undefined, { numeric: true });
-      return sortConfig.dir === "asc" ? cmp : -cmp;
-    });
-    return rows;
-  }, [students, search, sortConfig]);
+  const q = search.toLowerCase().trim();
+  let rows = students;
+
+  // ✅ Status filter yahan lagao
+  if (statusFilter) {
+    rows = rows.filter((s) => s.status === statusFilter);
+  }
+
+  // Search filter
+  if (q) {
+    rows = rows.filter((s) =>
+      s.name?.toLowerCase().includes(q) ||
+      s.phone?.toLowerCase().includes(q) ||
+      s.father_name?.toLowerCase().includes(q)
+    );
+  }
+
+  // Sort
+  rows = [...rows].sort((a, b) => {
+    const aVal = sortConfig.field === "course" ? (a.course_name ?? "") : (a[sortConfig.field] ?? "");
+    const bVal = sortConfig.field === "course" ? (b.course_name ?? "") : (b[sortConfig.field] ?? "");
+    const cmp = String(aVal).localeCompare(String(bVal), undefined, { numeric: true });
+    return sortConfig.dir === "asc" ? cmp : -cmp;
+  });
+
+  return rows;
+}, [students, search, sortConfig, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(processed.length / PAGE_SIZE));
   const paginated = processed.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const counts = useMemo(() => {
-    const all = search ? processed : students;
-    return {
-      total: all.length,
-      active: all.filter((s) => s.status === "active").length,
-      completed: all.filter((s) => s.status === "completed").length,
-      dropped: all.filter((s) => s.status === "dropped").length,
-    };
-  }, [students, processed, search]);
+  const counts = useMemo(() => ({
+    total: students.length,
+    active: students.filter((s) => s.status === "active").length,
+    completed: students.filter((s) => s.status === "completed").length,
+    dropped: students.filter((s) => s.status === "dropped").length,
+  }), [students]);
 
   const anySyncing = syncing;
 

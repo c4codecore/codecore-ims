@@ -32,6 +32,7 @@ class Student(models.Model):
         ("active",    "Active"),
         ("completed", "Completed"),
         ("dropped",   "Dropped"),
+        ("inactive", "Inactive"),
     )
 
     # Google Form fields
