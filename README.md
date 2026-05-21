@@ -136,6 +136,39 @@ npm run dev
 
 ---
 
+## Local WiFi Startup (Frontend + Backend)
+
+Use these commands when you want to run the app on your computer and access it from other devices on the same WiFi.
+
+```powershell
+# Terminal 1 - Backend
+cd C:\nnn\codecore-ims\backend
+.\venv\Scripts\activate
+python manage.py runserver 0.0.0.0:8000
+```
+
+```powershell
+# Terminal 2 - Frontend
+cd C:\nnn\codecore-ims\frontend
+npm run dev -- --host 0.0.0.0
+```
+
+Open the app from any device on the same WiFi:
+
+```text
+http://192.168.1.7:5173
+```
+
+Backend/API URL:
+
+```text
+http://192.168.1.7:8000
+```
+
+If the site does not open on another device, allow Python and Node.js through Windows Firewall for Private networks.
+
+---
+
 ## 📊 Google Sheets Sync — Correct Order
 
 > ⚠️ Always follow this order. Wrong order = missing enrollments.
