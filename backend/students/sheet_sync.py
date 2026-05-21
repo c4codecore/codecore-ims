@@ -433,15 +433,12 @@ def sync_from_details_sheet():
         if course:
             enrollment = Enrollment.objects.filter(student=student, course=course).first()
 
-        # Priority 2 (DANGER ZONE): Agar course match nahi aur student ki sirf
-        # 1 enrollment hai toh wahi le lo
-        # ⚠️ PROBLEM: Multi-course students ke liye ye galat enrollment update kar sakta hai!
-        # Example: Amit ke paas DCA enrollment hai, Programming Language row aaya,
-        #          course resolve nahi hua → ye DCA enrollment ko update karega ❌
-        if not enrollment:
-            all_enr = Enrollment.objects.filter(student=student)
-            if all_enr.count() == 1:
-                enrollment = all_enr.first()
+        
+        # Priority 2: Roll No. se fallback (course resolve nahi hua tab bhi sahi enrollment milegi)
+        if not enrollment and roll_no:
+            enrollment = Enrollment.objects.filter(
+                student=student, roll_no=roll_no
+            ).first()
 
         # ══════════════════════════════════════════════════════════════════════
         # STEP 7: Enrollment mili — update karo (sirf blank fields)
