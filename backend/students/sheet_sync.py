@@ -1,9 +1,10 @@
 import gspread
+import re
 from google.oauth2.service_account import Credentials
 from decouple import config
 from django.utils import timezone
 from .models import Student, Course, Enrollment, CourseAlias
-from datetime import datetime
+from datetime import date, datetime, time
 
 COURSE_ALIAS_MAP = {
     "certificate in office automation"                       : "Certificate in Office Automation",
@@ -91,16 +92,49 @@ def clean(value):
     return str(value).strip()
 
 
-def parse_date(date_str):
-    if not date_str:
+def _header_key(value):
+    return re.sub(r"[^a-z0-9]+", "", clean(value).lower())
+
+
+def row_value(row, *names):
+    normalized = {_header_key(k): v for k, v in row.items()}
+    for name in names:
+        value = normalized.get(_header_key(name))
+        if clean(value):
+            return value
+    return ""
+
+
+def parse_date(date_val):
+    if not date_val:
         return None
-    s = clean(date_str).replace(" 00:00:00", "")
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%d-%b-%Y"):
+    if isinstance(date_val, datetime):
+        return date_val.date()
+    if isinstance(date_val, date):
+        return date_val
+
+    s = clean(date_val).replace(" 00:00:00", "")
+    if re.fullmatch(r"\d+(\.\d+)?", s):
+        try:
+            serial = float(s)
+            if serial > 1000:
+                return date.fromordinal(date(1899, 12, 30).toordinal() + int(serial))
+        except (ValueError, OverflowError):
+            pass
+
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%m/%d/%Y", "%d-%m-%Y", "%d-%b-%Y", "%d %b %Y"):
         try:
             return datetime.strptime(s, fmt).date()
         except ValueError:
             continue
     return None
+
+
+def as_datetime(date_val):
+    parsed = parse_date(date_val)
+    if not parsed:
+        return None
+    return timezone.make_aware(datetime.combine(parsed, time.min))
 
 
 def resolve_course(course_raw: str):
@@ -142,19 +176,33 @@ def _merge_student_fields(student, row):
     """
     changed = False
 
+    email = clean(row_value(row, "Email", "Email Address"))
+    if email and not student.email:
+        email_taken = Student.objects.filter(email__iexact=email).exclude(pk=student.pk).exists()
+        if not email_taken:
+            student.email = email
+            changed = True
+
+    course = resolve_course(clean(row_value(row, "Course", "Course Name")))
+    joining_date = as_datetime(row_value(row, "Date OF Joining", "Date of Joining", "Joining Date"))
+    total_fees = _parse_number(row_value(row, "Total Fees", "Fees", "Course Fees"))
+
     candidates = {
-        "father_name"       : clean(row.get("Father's Name")           or row.get("Father Name")),
-        "mother_name"       : clean(row.get("Mother's Name")           or row.get("Mother Name")),
-        "photo_url"         : clean(row.get("Student Image")           or row.get("  Upload Your Photo  ") or row.get("Upload Your Photo")),
-        "address"           : clean(row.get("Full Address")            or row.get("Address")),
-        "qualification"     : clean(row.get("Qualification")           or row.get("Educational Qualification")),
-        "gender"            : clean(row.get("Gender")                  or row.get("  Gender  ")),
-        "dob"               : parse_date(clean(row.get("Date of Birth"))),
-        "phone"             : clean(row.get("Phone No.")               or row.get("Phone number")),
-        "comments"          : clean(row.get("Comments")),
-        "aadhaar_number"    : clean(row.get("Aadhaar Number")),
-        "aadhaar_front_url" : clean(row.get("Copy of Aadhaar Card (Front Side)") or row.get("Copy of Aadhaar Card")),
-        "aadhaar_back_url"  : clean(row.get("Copy of Aadhaar Card (Back Side)")),
+        "father_name"       : clean(row_value(row, "Father's Name", "Father Name")),
+        "mother_name"       : clean(row_value(row, "Mother's Name", "Mother Name")),
+        "photo_url"         : clean(row_value(row, "Student Image", "Upload Your Photo", "Photo")),
+        "address"           : clean(row_value(row, "Full Address", "Address")),
+        "qualification"     : clean(row_value(row, "Qualification", "Educational Qualification")),
+        "gender"            : clean(row_value(row, "Gender")),
+        "dob"               : parse_date(row_value(row, "Date of Birth", "DOB")),
+        "phone"             : clean(row_value(row, "Phone No.", "Phone number", "Mobile No.", "Mobile Number")),
+        "comments"          : clean(row_value(row, "Comments", "Remark", "Remarks")),
+        "aadhaar_number"    : clean(row_value(row, "Aadhaar Number", "Aadhar Number")),
+        "aadhaar_front_url" : clean(row_value(row, "Copy of Aadhaar Card (Front Side)", "Copy of Aadhaar Card", "Aadhaar Front")),
+        "aadhaar_back_url"  : clean(row_value(row, "Copy of Aadhaar Card (Back Side)", "Aadhaar Back")),
+        "course"            : course,
+        "admission_date"    : joining_date,
+        "total_fees"        : total_fees,
     }
 
     for field, new_val in candidates.items():
@@ -164,7 +212,7 @@ def _merge_student_fields(student, row):
             changed = True
 
     # Status hamesha latest sheet value se update hoga
-    status_raw = clean(row.get("Status"))
+    status_raw = clean(row_value(row, "Status"))
     if status_raw:
         mapped = _map_status(status_raw)
         if mapped and student.status != mapped:
@@ -204,6 +252,84 @@ def _parse_session(val):
         return None
 
 
+def _find_existing_student(email="", phone="", roll_no="", name="", dob_val=None, father="", course=None, joining_date=None):
+    """
+    Multiple weak sheets ko ek DB student se jodne ke liye best-effort matching.
+    Strong identifiers pehle, fuzzy name/DOB/father fallback mein.
+    """
+    if roll_no:
+        enrollment = Enrollment.objects.filter(roll_no=roll_no).select_related("student").first()
+        if enrollment:
+            return enrollment.student
+
+    if email:
+        student = Student.objects.filter(email__iexact=email).first()
+        if student:
+            return student
+
+    if phone:
+        student = _phone_match(phone)
+        if student:
+            return student
+
+    if name and dob_val and father:
+        first_name = name.strip().split()[0].lower()
+        for student in Student.objects.filter(dob=dob_val, father_name__iexact=father.strip()):
+            if student.name.strip().split()[0].lower() == first_name:
+                return student
+
+    if name:
+        matches = Student.objects.filter(name__iexact=name)
+        if course:
+            course_matches = matches.filter(course=course).order_by("id")
+            if joining_date:
+                enrollment = Enrollment.objects.filter(
+                    student__in=course_matches,
+                    course=course,
+                    start_date=joining_date,
+                ).select_related("student").order_by("student_id").first()
+                if enrollment:
+                    return enrollment.student
+            if course_matches.exists():
+                return course_matches.first()
+        if matches.count() == 1:
+            return matches.first()
+
+    return None
+
+
+def _get_or_create_student_by_email(email, defaults):
+    student = Student.objects.filter(email__iexact=email).first()
+    if student:
+        return student, False
+    return Student.objects.get_or_create(email=email, defaults=defaults)
+
+
+def _student_defaults(row, name, email, phone, course, source_row=None):
+    return {
+        "name"              : name,
+        "email"             : email or None,
+        "father_name"       : clean(row_value(row, "Father's Name", "Father Name")),
+        "mother_name"       : clean(row_value(row, "Mother's Name", "Mother Name")),
+        "dob"               : parse_date(row_value(row, "Date of Birth", "DOB")),
+        "gender"            : clean(row_value(row, "Gender")),
+        "qualification"     : clean(row_value(row, "Qualification", "Educational Qualification")),
+        "address"           : clean(row_value(row, "Full Address", "Address")),
+        "phone"             : phone,
+        "photo_url"         : clean(row_value(row, "Student Image", "Upload Your Photo", "Photo")),
+        "aadhaar_front_url" : clean(row_value(row, "Copy of Aadhaar Card (Front Side)", "Copy of Aadhaar Card", "Aadhaar Front")),
+        "aadhaar_back_url"  : clean(row_value(row, "Copy of Aadhaar Card (Back Side)", "Aadhaar Back")),
+        "aadhaar_number"    : clean(row_value(row, "Aadhaar Number", "Aadhar Number")),
+        "comments"          : clean(row_value(row, "Comments", "Remark", "Remarks")),
+        "course"            : course,
+        "admission_date"    : as_datetime(row_value(row, "Date OF Joining", "Date of Joining", "Joining Date")),
+        "total_fees"        : _parse_number(row_value(row, "Total Fees", "Fees", "Course Fees")),
+        "status"            : _map_status(clean(row_value(row, "Status"))) or "active",
+        "sheet_row"         : source_row,
+        "synced_at"         : timezone.now(),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1.  FORM SHEET SYNC
 # ─────────────────────────────────────────────────────────────────────────────
@@ -219,36 +345,48 @@ def sync_students_from_sheet():
     errors  = []
 
     for index, row in enumerate(rows, start=2):
-        email     = clean(row.get("Email"))
-        name      = clean(row.get("Name"))
-        phone_val = clean(row.get("Phone number"))
+        email     = clean(row_value(row, "Email", "Email Address"))
+        name      = clean(row_value(row, "Name", "Student Name"))
+        phone_val = clean(row_value(row, "Phone number", "Phone No.", "Mobile No.", "Mobile Number"))
 
         # Dono blank hain toh row kisi kaam ki nahi
-        if not email and not name:
+        if not email and not name and not phone_val:
             skipped += 1
             continue
 
-        course = resolve_course(clean(row.get("Course")))
+        course = resolve_course(clean(row_value(row, "Course", "Course Name")))
 
         try:
-            if email:
+            student = _find_existing_student(
+                email=email,
+                phone=phone_val,
+                name=name,
+                dob_val=parse_date(row_value(row, "Date of Birth", "DOB")),
+                father=clean(row_value(row, "Father's Name", "Father Name")),
+                course=course,
+            )
+
+            if student:
+                _merge_student_fields(student, row)
+                updated += 1
+            elif email and not _phone_match(phone_val):
                 # ── Email hai — get_or_create safe hai ───────────────────────
-                student, was_created = Student.objects.get_or_create(
+                student, was_created = _get_or_create_student_by_email(
                     email=email,
                     defaults={
                         "name"              : name,
-                        "father_name"       : clean(row.get("Father Name")),
-                        "mother_name"       : clean(row.get("Mother Name")),
-                        "dob"               : parse_date(clean(row.get("Date of Birth"))),
-                        "gender"            : clean(row.get("Gender") or row.get("  Gender  ")),
-                        "qualification"     : clean(row.get("Educational Qualification")),
-                        "address"           : clean(row.get("Address")),
+                        "father_name"       : clean(row_value(row, "Father's Name", "Father Name")),
+                        "mother_name"       : clean(row_value(row, "Mother's Name", "Mother Name")),
+                        "dob"               : parse_date(row_value(row, "Date of Birth", "DOB")),
+                        "gender"            : clean(row_value(row, "Gender")),
+                        "qualification"     : clean(row_value(row, "Educational Qualification", "Qualification")),
+                        "address"           : clean(row_value(row, "Address", "Full Address")),
                         "phone"             : phone_val,
-                        "photo_url"         : clean(row.get("Upload Your Photo") or row.get("  Upload Your Photo  ")),
-                        "aadhaar_front_url" : clean(row.get("Copy of Aadhaar Card (Front Side)")),
-                        "aadhaar_back_url"  : clean(row.get("Copy of Aadhaar Card (Back Side)")),
-                        "aadhaar_number"    : clean(row.get("Aadhaar Number")),
-                        "comments"          : clean(row.get("Comments")),
+                        "photo_url"         : clean(row_value(row, "Upload Your Photo", "Student Image", "Photo")),
+                        "aadhaar_front_url" : clean(row_value(row, "Copy of Aadhaar Card (Front Side)", "Copy of Aadhaar Card", "Aadhaar Front")),
+                        "aadhaar_back_url"  : clean(row_value(row, "Copy of Aadhaar Card (Back Side)", "Aadhaar Back")),
+                        "aadhaar_number"    : clean(row_value(row, "Aadhaar Number", "Aadhar Number")),
+                        "comments"          : clean(row_value(row, "Comments", "Remark", "Remarks")),
                         "course"            : course,
                         "sheet_row"         : index,
                         "synced_at"         : timezone.now(),
@@ -270,21 +408,24 @@ def sync_students_from_sheet():
                     updated += 1
                 else:
                     # Koi match nahi — naya banao, NULL email store hoga
+                    if not name:
+                        skipped += 1
+                        continue
                     student = Student.objects.create(
                         name              = name,
                         email             = None,
-                        father_name       = clean(row.get("Father Name")),
-                        mother_name       = clean(row.get("Mother Name")),
-                        dob               = parse_date(clean(row.get("Date of Birth"))),
-                        gender            = clean(row.get("Gender") or row.get("  Gender  ")),
-                        qualification     = clean(row.get("Educational Qualification")),
-                        address           = clean(row.get("Address")),
+                        father_name       = clean(row_value(row, "Father's Name", "Father Name")),
+                        mother_name       = clean(row_value(row, "Mother's Name", "Mother Name")),
+                        dob               = parse_date(row_value(row, "Date of Birth", "DOB")),
+                        gender            = clean(row_value(row, "Gender")),
+                        qualification     = clean(row_value(row, "Educational Qualification", "Qualification")),
+                        address           = clean(row_value(row, "Address", "Full Address")),
                         phone             = phone_val,
-                        photo_url         = clean(row.get("Upload Your Photo") or row.get("  Upload Your Photo  ")),
-                        aadhaar_front_url = clean(row.get("Copy of Aadhaar Card (Front Side)")),
-                        aadhaar_back_url  = clean(row.get("Copy of Aadhaar Card (Back Side)")),
-                        aadhaar_number    = clean(row.get("Aadhaar Number")),
-                        comments          = clean(row.get("Comments")),
+                        photo_url         = clean(row_value(row, "Upload Your Photo", "Student Image", "Photo")),
+                        aadhaar_front_url = clean(row_value(row, "Copy of Aadhaar Card (Front Side)", "Copy of Aadhaar Card", "Aadhaar Front")),
+                        aadhaar_back_url  = clean(row_value(row, "Copy of Aadhaar Card (Back Side)", "Aadhaar Back")),
+                        aadhaar_number    = clean(row_value(row, "Aadhaar Number", "Aadhar Number")),
+                        comments          = clean(row_value(row, "Comments", "Remark", "Remarks")),
                         course            = course,
                         sheet_row         = index,
                         synced_at         = timezone.now(),
@@ -335,7 +476,8 @@ def sync_from_details_sheet():
 
     header_row_idx = None
     for i, row in enumerate(all_values):
-        if any("Roll No" in str(cell) or "Sr. No" in str(cell) for cell in row):
+        keys = {_header_key(cell) for cell in row}
+        if keys.intersection({"srno", "rollno", "enrollmentno", "name", "studentname"}):
             header_row_idx = i
             break
 
@@ -360,21 +502,38 @@ def sync_from_details_sheet():
 
         row = {headers[i]: (row_values[i] if i < len(row_values) else "") for i in range(len(headers))}
 
-        if not clean(row.get("Sr. No.")):
-            continue
+        name    = clean(row_value(row, "Name", "Student Name"))
+        email   = clean(row_value(row, "Email", "Email Address"))
+        phone   = clean(row_value(row, "Phone No.", "Phone number", "Mobile No.", "Mobile Number"))
+        roll_no = clean(row_value(row, "Roll No.", "Roll No", "Enrollment No", "Enrollment No."))
+        row_course = resolve_course(clean(row_value(row, "Course", "Course Name")))
+        joining_date = parse_date(row_value(row, "Date OF Joining", "Date of Joining", "Joining Date"))
 
-        name    = clean(row.get("Name"))
-        email   = clean(row.get("Email"))
-        phone   = clean(row.get("Phone No."))
-        roll_no = clean(row.get("Roll No."))
+        if not any([name, email, phone, roll_no, row_course]):
+            continue
 
         # ══════════════════════════════════════════════════════════════════════
         # STEP 4: Existing student dhundo — 4 levels mein (priority order)
         # ══════════════════════════════════════════════════════════════════════
-        student = None
+        student = _find_existing_student(
+            email=email,
+            phone=phone,
+            roll_no=roll_no,
+            name=name,
+            dob_val=parse_date(row_value(row, "Date of Birth", "DOB")),
+            father=clean(row_value(row, "Father's Name", "Father Name")),
+            course=row_course,
+            joining_date=joining_date,
+        )
+
+        # Roll no staff sheet ka strongest identifier hai.
+        if roll_no:
+            enr = Enrollment.objects.filter(roll_no=roll_no).first()
+            if enr:
+                student = enr.student
 
         # Level 1 — Email se match
-        if email:
+        if not student and email:
             student = Student.objects.filter(email__iexact=email).first()
 
         # Level 2 — Phone ke last 8 digits se match
@@ -383,8 +542,8 @@ def sync_from_details_sheet():
 
         # Level 3 — First name + DOB + Father's Name
         if not student and name:
-            dob_val = parse_date(clean(row.get("Date of Birth")))
-            father  = clean(row.get("Father's Name"))
+            dob_val = parse_date(row_value(row, "Date of Birth", "DOB"))
+            father  = clean(row_value(row, "Father's Name", "Father Name"))
             if dob_val and father:
                 first_name = name.strip().split()[0].lower()
                 for s in Student.objects.filter(
@@ -401,6 +560,12 @@ def sync_from_details_sheet():
             if enr:
                 student = enr.student
 
+        # Level 5 - exact name unique ho to merge safe hai.
+        if not student and name:
+            matches = Student.objects.filter(name__iexact=name)
+            if matches.count() == 1:
+                student = matches.first()
+
         # ══════════════════════════════════════════════════════════════════════
         # STEP 5: Agar student DB mein nahi mila — naya student banao
         # ══════════════════════════════════════════════════════════════════════
@@ -410,24 +575,26 @@ def sync_from_details_sheet():
                 skipped += 1
                 continue
 
-            course = resolve_course(clean(row.get("Course")))
+            course = resolve_course(clean(row_value(row, "Course", "Course Name")))
 
             try:
                 if email:
-                    student, was_created_now = Student.objects.get_or_create(
+                    student, was_created_now = _get_or_create_student_by_email(
                         email=email,
                         defaults={
                             "name"          : name,
                             "phone"         : phone,
-                            "father_name"   : clean(row.get("Father's Name")),
-                            "mother_name"   : clean(row.get("Mother's Name")),
-                            "gender"        : clean(row.get("Gender")),
-                            "qualification" : clean(row.get("Qualification")),
-                            "address"       : clean(row.get("Full Address")),
-                            "photo_url"     : clean(row.get("Student Image")),
-                            "dob"           : parse_date(clean(row.get("Date of Birth"))),
+                            "father_name"   : clean(row_value(row, "Father's Name", "Father Name")),
+                            "mother_name"   : clean(row_value(row, "Mother's Name", "Mother Name")),
+                            "gender"        : clean(row_value(row, "Gender")),
+                            "qualification" : clean(row_value(row, "Qualification", "Educational Qualification")),
+                            "address"       : clean(row_value(row, "Full Address", "Address")),
+                            "photo_url"     : clean(row_value(row, "Student Image", "Upload Your Photo", "Photo")),
+                            "dob"           : parse_date(row_value(row, "Date of Birth", "DOB")),
                             "course"        : course,
-                            "status"        : _map_status(clean(row.get("Status"))) or "active",
+                            "admission_date": as_datetime(row_value(row, "Date OF Joining", "Date of Joining", "Joining Date")),
+                            "total_fees"    : _parse_number(row_value(row, "Total Fees", "Fees", "Course Fees")),
+                            "status"        : _map_status(clean(row_value(row, "Status"))) or "active",
                             "synced_at"     : timezone.now(),
                         },
                     )
@@ -442,15 +609,17 @@ def sync_from_details_sheet():
                         name          = name,
                         email         = None,
                         phone         = phone,
-                        father_name   = clean(row.get("Father's Name")),
-                        mother_name   = clean(row.get("Mother's Name")),
-                        gender        = clean(row.get("Gender")),
-                        qualification = clean(row.get("Qualification")),
-                        address       = clean(row.get("Full Address")),
-                        photo_url     = clean(row.get("Student Image")),
-                        dob           = parse_date(clean(row.get("Date of Birth"))),
+                        father_name   = clean(row_value(row, "Father's Name", "Father Name")),
+                        mother_name   = clean(row_value(row, "Mother's Name", "Mother Name")),
+                        gender        = clean(row_value(row, "Gender")),
+                        qualification = clean(row_value(row, "Qualification", "Educational Qualification")),
+                        address       = clean(row_value(row, "Full Address", "Address")),
+                        photo_url     = clean(row_value(row, "Student Image", "Upload Your Photo", "Photo")),
+                        dob           = parse_date(row_value(row, "Date of Birth", "DOB")),
                         course        = course,
-                        status        = _map_status(clean(row.get("Status"))) or "active",
+                        admission_date= as_datetime(row_value(row, "Date OF Joining", "Date of Joining", "Joining Date")),
+                        total_fees    = _parse_number(row_value(row, "Total Fees", "Fees", "Course Fees")),
+                        status        = _map_status(clean(row_value(row, "Status"))) or "active",
                         synced_at     = timezone.now(),
                     )
                     created += 1
@@ -469,11 +638,10 @@ def sync_from_details_sheet():
         # ══════════════════════════════════════════════════════════════════════
         # STEP 6: Course resolve karo aur Enrollment dhundo / banao
         # ══════════════════════════════════════════════════════════════════════
-        course       = resolve_course(clean(row.get("Course"))) or student.course
-        joining_date = parse_date(clean(row.get("Date OF Joining") or row.get("Date of Joining")))
-        total_fees   = _parse_number(row.get("Total Fees"))
-        status_raw   = clean(row.get("Status"))
-        session_raw  = clean(row.get("Session"))
+        course       = row_course or student.course
+        total_fees   = _parse_number(row_value(row, "Total Fees", "Fees", "Course Fees"))
+        status_raw   = clean(row_value(row, "Status"))
+        session_raw  = clean(row_value(row, "Session", "Duration", "Duration Months"))
 
         enrollment = None
 
