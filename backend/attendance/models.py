@@ -18,7 +18,7 @@ class Attendance(models.Model):
 
     class Meta:
         ordering = ["-date"]
-        unique_together = ["student", "date"]  # ek din mein ek hi entry
+        unique_together = ["student", "date"]
 
     def __str__(self):
         return f"{self.student.name} — {self.date} — {self.status}"
