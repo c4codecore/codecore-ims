@@ -132,8 +132,8 @@ function DailyTrendChart({ data }) {
       {data.map((day, i) => {
         const total = day.present + day.absent + day.leave;
         const presentH = total > 0 ? (day.present / maxVal) * 100 : 0;
-        const absentH  = total > 0 ? (day.absent  / maxVal) * 100 : 0;
-        const leaveH   = total > 0 ? (day.leave   / maxVal) * 100 : 0;
+        const absentH = total > 0 ? (day.absent / maxVal) * 100 : 0;
+        const leaveH = total > 0 ? (day.leave / maxVal) * 100 : 0;
         return (
           <div key={i} className="flex flex-col items-center gap-1 flex-1 group relative">
             {/* Tooltip */}
@@ -146,8 +146,8 @@ function DailyTrendChart({ data }) {
             {/* Stacked bar */}
             <div className="flex flex-col-reverse w-full rounded-sm overflow-hidden" style={{ height: "100px" }}>
               <div className="bg-emerald-500/70 w-full transition-all duration-500" style={{ height: `${presentH}%` }} />
-              <div className="bg-rose-500/70 w-full transition-all duration-500"   style={{ height: `${absentH}%` }} />
-              <div className="bg-amber-500/70 w-full transition-all duration-500"  style={{ height: `${leaveH}%` }} />
+              <div className="bg-rose-500/70 w-full transition-all duration-500" style={{ height: `${absentH}%` }} />
+              <div className="bg-amber-500/70 w-full transition-all duration-500" style={{ height: `${leaveH}%` }} />
             </div>
             <p className="text-[9px] text-muted-foreground truncate w-full text-center">{formatShortDate(day.date)}</p>
           </div>
@@ -196,7 +196,7 @@ function MarkAttendance() {
         api.get("/api/attendance/", { params: { date: selectedDate } }),
       ]);
       const studentList = Array.isArray(studRes.data) ? studRes.data : (studRes.data.results ?? []);
-      const attList     = Array.isArray(attRes.data)  ? attRes.data  : (attRes.data.results  ?? []);
+      const attList = Array.isArray(attRes.data) ? attRes.data : (attRes.data.results ?? []);
       setStudents(studentList);
       setExisting(attList);
       const map = {};
@@ -226,9 +226,9 @@ function MarkAttendance() {
     const vals = Object.values(records);
     return {
       present: vals.filter(r => r.status === "present").length,
-      absent:  vals.filter(r => r.status === "absent").length,
-      leave:   vals.filter(r => r.status === "leave").length,
-      total:   vals.length,
+      absent: vals.filter(r => r.status === "absent").length,
+      leave: vals.filter(r => r.status === "leave").length,
+      total: vals.length,
     };
   }, [records]);
 
@@ -240,8 +240,8 @@ function MarkAttendance() {
         date,
         records: students.map(s => ({
           student: s.id,
-          status:  records[s.id]?.status ?? "absent",
-          note:    records[s.id]?.note   ?? "",
+          status: records[s.id]?.status ?? "absent",
+          note: records[s.id]?.note ?? "",
         })),
       };
       const { data } = await api.post("/api/attendance/mark/", payload);
@@ -258,7 +258,7 @@ function MarkAttendance() {
     }
   };
 
-  const isToday  = date === todayISO();
+  const isToday = date === todayISO();
 
   return (
     <div className="flex flex-col gap-5">
@@ -299,9 +299,9 @@ function MarkAttendance() {
       {/* ── Summary Pills ── */}
       <div className="grid grid-cols-3 gap-3">
         {STATUSES.map(s => {
-          const cfg   = STATUS_CONFIG[s];
+          const cfg = STATUS_CONFIG[s];
           const count = counts[s];
-          const pct   = counts.total > 0 ? Math.round((count / counts.total) * 100) : 0;
+          const pct = counts.total > 0 ? Math.round((count / counts.total) * 100) : 0;
           return (
             <div key={s} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
               <span className={cn("size-2.5 rounded-full shrink-0", cfg.dot)} />
@@ -373,21 +373,21 @@ function MarkAttendance() {
             </TableHeader>
             <TableBody>
               {students.map((student, idx) => {
-                const rec    = records[student.id] ?? { status: "absent", note: "" };
+                const rec = records[student.id] ?? { status: "absent", note: "" };
                 const status = rec.status;
                 return (
                   <TableRow key={student.id}
                     className={cn("transition-colors",
                       status === "present" && "bg-emerald-500/5",
-                      status === "absent"  && "bg-rose-500/5",
-                      status === "leave"   && "bg-amber-500/5")}>
+                      status === "absent" && "bg-rose-500/5",
+                      status === "leave" && "bg-amber-500/5")}>
                     <TableCell className="w-10 text-center text-xs text-muted-foreground">{idx + 1}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold uppercase transition-colors",
                           status === "present" && "bg-emerald-500/15 text-emerald-600",
-                          status === "absent"  && "bg-rose-500/15 text-rose-600",
-                          status === "leave"   && "bg-amber-500/15 text-amber-600")}>
+                          status === "absent" && "bg-rose-500/15 text-rose-600",
+                          status === "leave" && "bg-amber-500/15 text-amber-600")}>
                           {student.name?.[0] ?? "?"}
                         </div>
                         <div className="min-w-0">
@@ -459,10 +459,10 @@ function AttendanceReport() {
       const list = Array.isArray(data) ? data : (data.results ?? []);
       setTodayData({
         present: list.filter(a => a.status === "present").length,
-        absent:  list.filter(a => a.status === "absent").length,
-        leave:   list.filter(a => a.status === "leave").length,
-        total:   list.length,
-        marked:  list.length > 0,
+        absent: list.filter(a => a.status === "absent").length,
+        leave: list.filter(a => a.status === "leave").length,
+        total: list.length,
+        marked: list.length > 0,
       });
     } catch {
       setTodayData(null);
@@ -504,7 +504,7 @@ function AttendanceReport() {
     if (!report?.students) return [];
     return [...report.students].sort((a, b) => {
       if (sortBy === "percentage") return a.percentage - b.percentage;
-      if (sortBy === "absent")     return b.absent - a.absent;
+      if (sortBy === "absent") return b.absent - a.absent;
       return a.student_name.localeCompare(b.student_name);
     });
   }, [report, sortBy]);
@@ -691,8 +691,8 @@ export default function Attendance() {
   const [activeTab, setActiveTab] = useState("mark");
 
   const tabs = [
-    { key: "mark",   label: "Mark Attendance",   icon: ClipboardList },
-    { key: "report", label: "Attendance Report",  icon: BarChart2 },
+    { key: "mark", label: "Mark Attendance", icon: ClipboardList },
+    { key: "report", label: "Attendance Report", icon: BarChart2 },
   ];
 
   return (
