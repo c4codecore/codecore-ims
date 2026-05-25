@@ -510,6 +510,7 @@ function AttendanceReport() {
   }, [report, sortBy]);
 
   const monthlyAvg = useMemo(() => {
+    if (report?.summary) return Math.round(report.summary.percentage ?? 0);
     if (!report?.students || report.students.length === 0) return 0;
     return Math.round(report.students.reduce((s, x) => s + x.percentage, 0) / report.students.length);
   }, [report]);
@@ -517,6 +518,14 @@ function AttendanceReport() {
   const lowAttendance = useMemo(() => {
     if (!report?.students) return 0;
     return report.students.filter(s => s.percentage < 75 && s.total > 0).length;
+  }, [report]);
+
+  const consecutiveAbsentees = useMemo(() => {
+    if (!report?.students) return [];
+    return report.students
+      .filter(s => s.consecutive_absent >= 2)
+      .sort((a, b) => b.consecutive_absent - a.consecutive_absent)
+      .slice(0, 6);
   }, [report]);
 
   return (
@@ -534,7 +543,7 @@ function AttendanceReport() {
           colorClass="text-rose-500 bg-rose-500/10" loading={todayLoading} />
         <KpiCard label="Monthly Avg %" icon={TrendingUp}
           value={loading ? "—" : `${monthlyAvg}%`}
-          sub={formatMonth(month)}
+          sub={report?.summary ? `${report.summary.students_marked}/${report.summary.active_students} students marked` : formatMonth(month)}
           colorClass="text-blue-500 bg-blue-500/10" loading={loading} />
         <KpiCard label="Low Attendance" icon={AlertTriangle}
           value={loading ? "—" : lowAttendance}
@@ -592,6 +601,73 @@ function AttendanceReport() {
         </div>
       )}
 
+      {!loading && report?.summary && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">Course Summary</p>
+              <Badge variant="secondary" className="font-normal">{report.course_summary?.length ?? 0} courses</Badge>
+            </div>
+            <div className="space-y-3">
+              {(report.course_summary ?? []).slice(0, 6).map(course => (
+                <div key={course.course_name} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="truncate font-medium text-foreground">{course.course_name}</span>
+                    <span className="shrink-0 text-muted-foreground">{course.percentage}%</span>
+                  </div>
+                  <AttendanceBar percentage={course.percentage} />
+                </div>
+              ))}
+              {(report.course_summary ?? []).length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">No course data.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">Needs Attention</p>
+              <Badge variant="secondary" className="font-normal">{report.low_attendance?.length ?? 0} low</Badge>
+            </div>
+            <div className="space-y-2">
+              {(report.low_attendance ?? []).slice(0, 6).map(student => (
+                <div key={student.student_id} className="flex items-center justify-between gap-3 rounded-lg bg-rose-500/5 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{student.student_name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{student.course_name}</p>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold text-rose-600">{student.percentage}%</span>
+                </div>
+              ))}
+              {(report.low_attendance ?? []).length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">No low attendance students.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">Follow Up</p>
+              <Badge variant="secondary" className="font-normal">{consecutiveAbsentees.length} alerts</Badge>
+            </div>
+            <div className="space-y-2">
+              {consecutiveAbsentees.map(student => (
+                <div key={student.student_id} className="flex items-center justify-between gap-3 rounded-lg bg-amber-500/5 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-foreground">{student.student_name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{student.course_name}</p>
+                  </div>
+                  <span className="shrink-0 text-xs font-semibold text-amber-600">{student.consecutive_absent} absent</span>
+                </div>
+              ))}
+              {consecutiveAbsentees.length === 0 && (
+                <p className="py-6 text-center text-sm text-muted-foreground">No consecutive absence alerts.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Student Report Table ── */}
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-4 py-3 flex-wrap gap-2">
@@ -633,6 +709,7 @@ function AttendanceReport() {
                 <TableHead className="text-center">Present</TableHead>
                 <TableHead className="text-center">Absent</TableHead>
                 <TableHead className="text-center hidden md:table-cell">Leave</TableHead>
+                <TableHead className="text-center hidden lg:table-cell">Streak</TableHead>
                 <TableHead className="min-w-[140px]">Attendance %</TableHead>
               </TableRow>
             </TableHeader>
@@ -655,6 +732,9 @@ function AttendanceReport() {
                               <AlertTriangle className="size-3" /> Low attendance
                             </p>
                           )}
+                          {s.total === 0 && (
+                            <p className="text-xs text-muted-foreground">Not marked this month</p>
+                          )}
                         </div>
                       </div>
                     </TableCell>
@@ -669,6 +749,13 @@ function AttendanceReport() {
                     </TableCell>
                     <TableCell className="text-center hidden md:table-cell">
                       <span className={cn("font-semibold", s.leave > 0 ? "text-amber-600" : "text-muted-foreground")}>{s.leave}</span>
+                    </TableCell>
+                    <TableCell className="text-center hidden lg:table-cell">
+                      {s.consecutive_absent > 0 ? (
+                        <span className="font-semibold text-amber-600">{s.consecutive_absent}</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <AttendanceBar percentage={s.percentage} />
