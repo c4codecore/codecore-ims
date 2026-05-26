@@ -222,3 +222,50 @@ def attendance_monthly_report(request):
         "no_attendance": no_attendance,
         "absent_today": absent_today,
     })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def attendance_calendar(request):
+    """
+    Student ke saare attendance records return karta hai dict format mein.
+ 
+    Query params:
+        student  (required) — student ID
+        year     (optional) — e.g. 2026  → sirf uss saal ka data
+                              default: current year
+ 
+    Response:
+        {
+            "student_id": 3,
+            "year": 2026,
+            "records": {
+                "2026-05-01": "present",
+                "2026-05-05": "absent",
+                "2026-05-06": "leave",
+                ...
+            }
+        }
+    """
+    student_id = request.query_params.get("student")
+    if not student_id:
+        return Response({"error": "student id required"}, status=400)
+ 
+    year_param = request.query_params.get("year")
+    year = int(year_param) if year_param else date_type.today().year
+ 
+    qs = Attendance.objects.filter(
+        student_id=student_id,
+        date__year=year,
+    ).values("date", "status").order_by("date")
+ 
+    records = {
+        str(row["date"]): row["status"]
+        for row in qs
+    }
+ 
+    return Response({
+        "student_id": int(student_id),
+        "year": year,
+        "records": records,
+    })
