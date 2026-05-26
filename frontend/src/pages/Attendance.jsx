@@ -455,7 +455,7 @@ function StudentDrawerContent({ sid, studentName, courseName, summary, calData: 
 
 // ──────────────────────────────────────────── Day Drawer Content ─────────────
 
-function DayDrawerContent({ day, allStudents }) {
+function DayDrawerContent({ day, dayRecords, dayLoading }) {
   if (!day) return null;
   const total = (day.present ?? 0) + (day.absent ?? 0) + (day.leave ?? 0);
   const pct = total > 0 ? Math.round((day.present / total) * 100) : 0;
@@ -467,31 +467,42 @@ function DayDrawerContent({ day, allStudents }) {
 
       <div className="rounded-xl border border-border bg-card p-4">
         <SectionLabel icon={Users}>Students — {shortDate(day.date)}</SectionLabel>
-        <div className="space-y-1.5">
-          {allStudents.map((s, i) => {
-            // Deterministic fake status from date + student index seed
-            const seed = day.date.split("-").reduce((a, b) => a + Number(b), 0);
-            const r = (Math.sin(seed * 31 + i * 97) * 0.5 + 0.5);
-            const st = r < 0.72 ? "present" : r < 0.88 ? "absent" : "leave";
-            const cfg = STATUS_CFG[st];
-            const { Icon } = cfg;
-            return (
-              <div key={s.student_id} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
-                <Avatar name={s.student_name} status={st} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{s.student_name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{s.course_name}</p>
+        {dayLoading && (
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+            <Loader2 className="size-6 animate-spin" />
+            <p className="text-sm">Loading students...</p>
+          </div>
+        )}
+
+        {!dayLoading && dayRecords.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            {day?.is_weekend && !day?.is_marked
+              ? "Weekend / holiday - attendance not marked"
+              : "No attendance data for this day"}
+          </p>
+        )}
+
+        {!dayLoading && dayRecords.length > 0 && (
+          <div className="space-y-1.5">
+            {dayRecords.map((s) => {
+              const st = s.status ?? "absent";
+              const cfg = STATUS_CFG[st] ?? STATUS_CFG.absent;
+              const { Icon } = cfg;
+              return (
+                <div key={s.student_id ?? s.student} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
+                  <Avatar name={s.student_name ?? s.name ?? "?"} status={st} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.student_name ?? s.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{s.course_name ?? "-"}</p>
+                  </div>
+                  <span className={cn("text-xs font-medium flex items-center gap-1 shrink-0", cfg.textCls)}>
+                    <Icon className="size-3" />{cfg.label}
+                  </span>
                 </div>
-                <span className={cn("text-xs font-medium flex items-center gap-1 shrink-0", cfg.textCls)}>
-                  <Icon className="size-3" />{cfg.label}
-                </span>
-              </div>
-            );
-          })}
-          {allStudents.length === 0 && (
-            <p className="py-4 text-center text-sm text-muted-foreground">No student data available</p>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
@@ -872,7 +883,14 @@ function DailyTrendChart({ data, onBarClick }) {
                   <p className="text-emerald-600">Present: {d.present}</p>
                   <p className="text-rose-600">Absent: {d.absent}</p>
                   <p className="text-amber-600">Leave: {d.leave}</p>
-                  {(d.holiday ?? 0) > 0 && <p className="text-slate-400">Holiday: {d.holiday}</p>}
+                  {(d.holiday ?? 0) > 0 && (
+                    <p className="text-slate-400">
+                      {d.is_weekend && !d.is_marked ? "Weekend" : "Holiday"}: {d.holiday}
+                    </p>
+                  )}
+                  {!d.is_marked && !d.is_weekend && (
+                    <p className="text-muted-foreground">Not marked</p>
+                  )}
                 </div>
               )}
               {/* Stacked bar segments */}
@@ -1272,6 +1290,8 @@ export default function Attendance() {
 
   // Drawer
   const [drawer, setDrawer] = useState({ open: false, mode: null, data: null });
+  const [dayRecords, setDayRecords] = useState([]);
+  const [dayLoading, setDayLoading] = useState(false);
 
   // Cache: summaryCache[sid] = summary obj
   //        calCache[sid][year] = { "YYYY-MM-DD": "present"|"absent"|"leave" }
@@ -1333,7 +1353,7 @@ export default function Attendance() {
     setDrawer({
       open: true,
       mode: "student",
-      data: { sid, name, course, summary: summaryCache.current[sid], calData, sid, fetchCalData },
+      data: { sid, name, course, summary: summaryCache.current[sid], calData, fetchCalData },
     });
   }, [fetchCalData]);
 
@@ -1344,9 +1364,19 @@ export default function Attendance() {
     setDrawer({ open: true, mode: "course", data: { course, students, courseName } });
   }, []);
 
-  const openDayDrawer = useCallback((day) => {
+  const openDayDrawer = useCallback(async (day) => {
     const rd = reportDataRef.current;
     setDrawer({ open: true, mode: "day", data: { day, allStudents: rd?.students ?? [] } });
+    setDayRecords([]);
+    setDayLoading(true);
+    try {
+      const { data } = await api.get("/api/attendance/", { params: { date: day.date } });
+      setDayRecords(Array.isArray(data) ? data : (data.results ?? []));
+    } catch {
+      setDayRecords([]);
+    } finally {
+      setDayLoading(false);
+    }
   }, []);
 
   // Cascade: course → student drawer
@@ -1448,7 +1478,8 @@ export default function Attendance() {
         {drawer.open && drawer.mode === "day" && drawer.data && (
           <DayDrawerContent
             day={drawer.data.day}
-            allStudents={drawer.data.allStudents}
+            dayRecords={dayRecords}
+            dayLoading={dayLoading}
           />
         )}
 

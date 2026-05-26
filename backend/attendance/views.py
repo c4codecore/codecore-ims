@@ -1,5 +1,5 @@
 from calendar import monthrange
-from datetime import date as date_type
+from datetime import date as date_type, timedelta
 
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -205,7 +205,7 @@ def attendance_monthly_report(request):
         students.append(student)
 
     # Daily trend — holiday bhi include
-    daily_trend = (
+    trend_rows = (
         Attendance.objects
         .filter(
             date__year=year,
@@ -221,6 +221,38 @@ def attendance_monthly_report(request):
         )
         .order_by("date")
     )
+    trend_by_date = {row["date"]: row for row in trend_rows}
+    active_count = active_students.count()
+    daily_trend = []
+
+    current = start_date
+    while current <= end_date:
+        row = trend_by_date.get(current)
+        is_weekend = current.weekday() in (5, 6)
+
+        if row:
+            item = {
+                "date"      : str(current),
+                "present"   : row["present"],
+                "absent"    : row["absent"],
+                "leave"     : row["leave"],
+                "holiday"   : row["holiday"],
+                "is_weekend": is_weekend,
+                "is_marked" : True,
+            }
+        else:
+            item = {
+                "date"      : str(current),
+                "present"   : 0,
+                "absent"    : 0,
+                "leave"     : 0,
+                "holiday"   : active_count if is_weekend else 0,
+                "is_weekend": is_weekend,
+                "is_marked" : False,
+            }
+
+        daily_trend.append(item)
+        current += timedelta(days=1)
 
     # Course summary — holiday exclude from percentage
     course_map: dict[str, dict] = {}
@@ -284,7 +316,7 @@ def attendance_monthly_report(request):
             "low_attendance_count" : len(low_attendance),
         },
         "students"       : students,
-        "daily_trend"    : list(daily_trend),
+        "daily_trend"    : daily_trend,
         "course_summary" : sorted(course_map.values(), key=lambda c: c["course_name"]),
         "low_attendance" : sorted(low_attendance, key=lambda s: s["percentage"]),
         "no_attendance"  : no_attendance,
