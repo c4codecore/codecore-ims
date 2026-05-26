@@ -6,6 +6,7 @@ class Attendance(models.Model):
         ("present", "Present"),
         ("absent",  "Absent"),
         ("leave",   "Leave"),
+        ("holiday", "Holiday"),
     )
 
     student    = models.ForeignKey(Student, on_delete=models.CASCADE,

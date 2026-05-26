@@ -32,11 +32,6 @@ def attendance_list(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def attendance_mark(request):
-    """
-    Bug 3 fix: record["student"] ko int() se cast kiya taaki
-    string ID bhi active_ids set se match ho sake — silent data
-    loss se bachao.
-    """
     active_students = Student.objects.filter(status="active")
     active_ids      = set(active_students.values_list("id", flat=True))
 
@@ -46,7 +41,6 @@ def attendance_mark(request):
     updated = 0
 
     for record in records:
-        # Bug 3 fix: int() cast — JSON se string aaye tab bhi match ho
         try:
             student_id = int(record["student"])
         except (KeyError, TypeError, ValueError):
@@ -79,24 +73,18 @@ def attendance_mark(request):
 @permission_classes([IsAuthenticated])
 def attendance_summary(request):
     """
-    Bug 10 fix: optional month/year filter add kiya.
-    - ?student=X              → overall lifetime summary (backward compatible)
-    - ?student=X&month=2026-05 → sirf us month ka summary
-    - ?student=X&year=2026     → sirf us saal ka summary
-
-    Frontend drawer mein "This month" dikhana ho toh
-    ?student=X&month=YYYY-MM pass karo.
+    Holiday wale din total mein count NAHI hote —
+    percentage = present / (present + absent + leave) only.
     """
     student_id  = request.query_params.get("student")
-    month_param = request.query_params.get("month")   # "YYYY-MM"
-    year_param  = request.query_params.get("year")    # "YYYY"
+    month_param = request.query_params.get("month")
+    year_param  = request.query_params.get("year")
 
     if not student_id:
         return Response({"error": "student id required"}, status=400)
 
     qs = Attendance.objects.filter(student_id=student_id)
 
-    # Optional filters
     if month_param:
         try:
             year, month = map(int, month_param.split("-"))
@@ -113,14 +101,18 @@ def attendance_summary(request):
     present = qs.filter(status="present").count()
     absent  = qs.filter(status="absent").count()
     leave   = qs.filter(status="leave").count()
+    holiday = qs.filter(status="holiday").count()
 
-    percentage = round((present / total * 100), 2) if total > 0 else 0
+    # Holiday din count mein nahi — sirf present/absent/leave
+    countable = present + absent + leave
+    percentage = round((present / countable * 100), 2) if countable > 0 else 0
 
     return Response({
         "total"     : total,
         "present"   : present,
         "absent"    : absent,
         "leave"     : leave,
+        "holiday"   : holiday,
         "percentage": percentage,
     })
 
@@ -129,12 +121,10 @@ def attendance_summary(request):
 @permission_classes([IsAuthenticated])
 def attendance_monthly_report(request):
     """
-    Bug 5 fix: consecutive_absent calculation fix kiya.
-    Pehle records ki ordering guarantee nahi thi by_student_records mein.
-    Ab explicitly date DESC order mein sort karke streak nikali jaati hai,
-    aur sirf working days (attendance marked days) count hote hain —
-    weekends/holidays automatically skip ho jaate hain kyunki unka
-    record DB mein hota hi nahi.
+    Holiday wale din:
+      - student ka total/percentage calculation mein count NAHI hote
+      - daily_trend mein alag "holiday" key aata hai
+      - course summary mein bhi exclude
     """
     month_param = request.query_params.get("month")
 
@@ -165,27 +155,25 @@ def attendance_monthly_report(request):
             student__status="active",
         )
         .select_related("student", "student__course")
-        .order_by("student_id", "-date")   # latest first — needed for streak
+        .order_by("student_id", "-date")
     )
 
-    # Build per-student map
     student_map = {
         student.id: {
-            "student_id"          : student.id,
-            "student_name"        : student.name,
-            "course_name"         : student.course.name if student.course else "-",
-            "present"             : 0,
-            "absent"              : 0,
-            "leave"               : 0,
-            "total"               : 0,
-            "percentage"          : 0,
-            "consecutive_absent"  : 0,
+            "student_id"         : student.id,
+            "student_name"       : student.name,
+            "course_name"        : student.course.name if student.course else "-",
+            "present"            : 0,
+            "absent"             : 0,
+            "leave"              : 0,
+            "holiday"            : 0,
+            "total"              : 0,
+            "percentage"         : 0,
+            "consecutive_absent" : 0,
         }
         for student in active_students
     }
 
-    # Bug 5 fix: records already ordered by (student_id, -date)
-    # Collect them per student in that order
     by_student_records: dict[int, list] = {}
     for record in attendance_qs:
         sid = record.student_id
@@ -196,24 +184,27 @@ def attendance_monthly_report(request):
 
     students = []
     for student in student_map.values():
-        total = student["present"] + student["absent"] + student["leave"]
-        student["total"]      = total
-        student["percentage"] = round((student["present"] / total * 100), 1) if total else 0
+        # Holiday exclude — sirf present/absent/leave count hote hain
+        countable = student["present"] + student["absent"] + student["leave"]
+        student["total"]      = countable
+        student["percentage"] = (
+            round((student["present"] / countable * 100), 1) if countable else 0
+        )
 
-        # Bug 5 fix: streak = consecutive absences from the LATEST record
-        # records already in date DESC order (latest first)
-        # weekends have no record → they are simply skipped (not counted as absent)
+        # Consecutive absent streak (holiday breaks streak nahi karta — skip karo)
         streak = 0
         for record in by_student_records.get(student["student_id"], []):
+            if record.status == "holiday":
+                continue          # holiday skip — streak pe asar nahi
             if record.status == "absent":
                 streak += 1
             else:
-                break   # first non-absent record → streak ends
+                break
         student["consecutive_absent"] = streak
 
         students.append(student)
 
-    # Daily trend
+    # Daily trend — holiday bhi include
     daily_trend = (
         Attendance.objects
         .filter(
@@ -226,11 +217,12 @@ def attendance_monthly_report(request):
             present=Count("id", filter=Q(status="present")),
             absent =Count("id", filter=Q(status="absent")),
             leave  =Count("id", filter=Q(status="leave")),
+            holiday=Count("id", filter=Q(status="holiday")),
         )
         .order_by("date")
     )
 
-    # Course summary
+    # Course summary — holiday exclude from percentage
     course_map: dict[str, dict] = {}
     for student in students:
         course_name = student["course_name"]
@@ -240,6 +232,7 @@ def attendance_monthly_report(request):
             "present"    : 0,
             "absent"     : 0,
             "leave"      : 0,
+            "holiday"    : 0,
             "total"      : 0,
             "percentage" : 0,
         })
@@ -247,7 +240,8 @@ def attendance_monthly_report(request):
         course["present"]  += student["present"]
         course["absent"]   += student["absent"]
         course["leave"]    += student["leave"]
-        course["total"]    += student["total"]
+        course["holiday"]  += student["holiday"]
+        course["total"]    += student["total"]   # already holiday-excluded
 
     for course in course_map.values():
         course["percentage"] = (
@@ -255,40 +249,36 @@ def attendance_monthly_report(request):
             if course["total"] else 0
         )
 
-    # Overall summary
     total_present = sum(s["present"] for s in students)
     total_absent  = sum(s["absent"]  for s in students)
     total_leave   = sum(s["leave"]   for s in students)
-    total_marked  = total_present + total_absent + total_leave
+    total_holiday = sum(s["holiday"] for s in students)
+    total_marked  = total_present + total_absent + total_leave  # holiday excluded
 
     low_attendance = [s for s in students if s["total"] > 0 and s["percentage"] < 75]
     no_attendance  = [s for s in students if s["total"] == 0]
 
-    # Absent today (only relevant if today falls in the requested month)
-    today       = timezone.localdate()
+    today        = timezone.localdate()
     absent_today = []
     if start_date <= today <= end_date:
         absent_today = list(
             Attendance.objects
             .filter(date=today, status="absent", student__status="active")
             .select_related("student", "student__course")
-            .values(
-                "student_id",
-                "student__name",
-                "student__course__name",
-            )
+            .values("student_id", "student__name", "student__course__name")
             .order_by("student__name")
         )
 
     return Response({
-        "month"          : f"{year}-{str(month).zfill(2)}",
-        "summary"        : {
+        "month"   : f"{year}-{str(month).zfill(2)}",
+        "summary" : {
             "active_students"      : active_students.count(),
             "students_marked"      : len([s for s in students if s["total"] > 0]),
             "students_not_marked"  : len(no_attendance),
             "present"              : total_present,
             "absent"               : total_absent,
             "leave"                : total_leave,
+            "holiday"              : total_holiday,
             "total"                : total_marked,
             "percentage"           : round((total_present / total_marked * 100), 1) if total_marked else 0,
             "low_attendance_count" : len(low_attendance),
@@ -306,24 +296,8 @@ def attendance_monthly_report(request):
 @permission_classes([IsAuthenticated])
 def attendance_calendar(request):
     """
-    Student ke attendance records dict format mein return karta hai.
-
-    Query params:
-        student  (required) — student ID
-        year     (optional) — e.g. 2026  → sirf us saal ka data
-                              default: current year
-
-    Response:
-        {
-            "student_id": 3,
-            "year": 2026,
-            "records": {
-                "2026-05-01": "present",
-                "2026-05-05": "absent",
-                "2026-05-06": "leave",
-                ...
-            }
-        }
+    Holiday bhi records mein aata hai — frontend calendar mein
+    grey cell dikhega aur percentage mein count nahi hoga.
     """
     student_id = request.query_params.get("student")
     if not student_id:

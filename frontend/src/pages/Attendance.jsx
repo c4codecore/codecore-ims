@@ -21,9 +21,9 @@ import api from "@/api/axios";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Input }  from "@/components/ui/input";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge }  from "@/components/ui/badge";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/useToast";
 import {
   CalendarCheck, Save, Loader2, AlertCircle, Users,
@@ -78,37 +78,45 @@ function shiftMonth(iso, delta) {
   return `${d.getFullYear()}-${p2(d.getMonth() + 1)}`;
 }
 function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
-function firstDOW(y, m)    { return new Date(y, m - 1, 1).getDay(); }
+function firstDOW(y, m) { return new Date(y, m - 1, 1).getDay(); }
 
 // ──────────────────────────────────────────────────────── constants ──────────
 
 const STATUS_CFG = {
   present: {
     label: "Present", Icon: CheckCircle2,
-    activeCls : "bg-emerald-500/15 text-emerald-600 border-emerald-500/40 dark:text-emerald-400",
-    rowCls    : "bg-emerald-500/[0.04]",
-    avCls     : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-    textCls   : "text-emerald-600 dark:text-emerald-400",
-    dotCls    : "bg-emerald-500",
+    activeCls: "bg-emerald-500/15 text-emerald-600 border-emerald-500/40 dark:text-emerald-400",
+    rowCls: "bg-emerald-500/[0.04]",
+    avCls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    textCls: "text-emerald-600 dark:text-emerald-400",
+    dotCls: "bg-emerald-500",
   },
   absent: {
     label: "Absent", Icon: XCircle,
-    activeCls : "bg-rose-500/15 text-rose-600 border-rose-500/40 dark:text-rose-400",
-    rowCls    : "bg-rose-500/[0.04]",
-    avCls     : "bg-rose-500/15 text-rose-700 dark:text-rose-300",
-    textCls   : "text-rose-600 dark:text-rose-400",
-    dotCls    : "bg-rose-500",
+    activeCls: "bg-rose-500/15 text-rose-600 border-rose-500/40 dark:text-rose-400",
+    rowCls: "bg-rose-500/[0.04]",
+    avCls: "bg-rose-500/15 text-rose-700 dark:text-rose-300",
+    textCls: "text-rose-600 dark:text-rose-400",
+    dotCls: "bg-rose-500",
   },
   leave: {
     label: "Leave", Icon: Clock,
-    activeCls : "bg-amber-500/15 text-amber-600 border-amber-500/40 dark:text-amber-400",
-    rowCls    : "bg-amber-500/[0.04]",
-    avCls     : "bg-amber-500/15 text-amber-700 dark:text-amber-300",
-    textCls   : "text-amber-600 dark:text-amber-400",
-    dotCls    : "bg-amber-500",
+    activeCls: "bg-amber-500/15 text-amber-600 border-amber-500/40 dark:text-amber-400",
+    rowCls: "bg-amber-500/[0.04]",
+    avCls: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+    textCls: "text-amber-600 dark:text-amber-400",
+    dotCls: "bg-amber-500",
+  },
+  holiday: {
+    label: "Holiday", Icon: CalendarCheck,
+    activeCls: "bg-blue-500/15 text-blue-600 border-blue-500/40 dark:text-blue-400",
+    rowCls: "bg-blue-500/[0.04]",
+    avCls: "bg-blue-500/15 text-blue-700 dark:text-blue-300",
+    textCls: "text-blue-600 dark:text-blue-400",
+    dotCls: "bg-blue-500",
   },
 };
-const STATUSES = ["present", "absent", "leave"];
+const STATUSES = ["present", "absent", "leave", "holiday"];
 
 function pctColor(pct) {
   return pct >= 75 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-rose-500";
@@ -117,8 +125,8 @@ function pctTextCls(pct) {
   return pct >= 75
     ? "text-emerald-600 dark:text-emerald-400"
     : pct >= 50
-    ? "text-amber-600 dark:text-amber-400"
-    : "text-rose-600 dark:text-rose-400";
+      ? "text-amber-600 dark:text-amber-400"
+      : "text-rose-600 dark:text-rose-400";
 }
 
 // ─────────────────────────────────────────────────── small atoms ─────────────
@@ -157,8 +165,8 @@ function StatTriple({ present = 0, absent = 0, leave = 0 }) {
     <div className="grid grid-cols-3 gap-2">
       {[
         { label: "Present", val: present, cls: "text-emerald-600 dark:text-emerald-400" },
-        { label: "Absent",  val: absent,  cls: "text-rose-600 dark:text-rose-400"       },
-        { label: "Leave",   val: leave,   cls: "text-amber-600 dark:text-amber-400"     },
+        { label: "Absent", val: absent, cls: "text-rose-600 dark:text-rose-400" },
+        { label: "Leave", val: leave, cls: "text-amber-600 dark:text-amber-400" },
       ].map(({ label, val, cls }) => (
         <div key={label} className="rounded-lg border border-border bg-card p-3 text-center">
           <div className={cn("text-xl font-semibold tabular-nums", cls)}>{val}</div>
@@ -264,11 +272,11 @@ function Drawer({ open, onClose, title, icon: Icon = User, children }) {
 const DOW_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
 function CalendarMonth({ year, month, data = {} }) {
-  const days  = daysInMonth(year, month);
+  const days = daysInMonth(year, month);
   const start = firstDOW(year, month);
   const cells = [
     ...Array.from({ length: start }, (_, i) => ({ day: null, key: `blank-${i}` })),
-    ...Array.from({ length: days },  (_, i) => ({ day: i + 1, key: `day-${i + 1}` })),
+    ...Array.from({ length: days }, (_, i) => ({ day: i + 1, key: `day-${i + 1}` })),
   ];
 
   return (
@@ -285,7 +293,7 @@ function CalendarMonth({ year, month, data = {} }) {
         {cells.map(({ day, key }) => {
           if (!day) return <div key={key} />;
           const iso = `${year}-${p2(month)}-${p2(day)}`;
-          const st  = data[iso];
+          const st = data[iso];
           const isToday = iso === todayISO();
           return (
             <div
@@ -294,10 +302,11 @@ function CalendarMonth({ year, month, data = {} }) {
               className={cn(
                 "aspect-square flex items-center justify-center text-[10px] font-medium rounded",
                 st === "present" && "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
-                st === "absent"  && "bg-rose-500/20 text-rose-700 dark:text-rose-300",
-                st === "leave"   && "bg-amber-500/20 text-amber-700 dark:text-amber-300",
-                !st              && "bg-muted/50 text-muted-foreground",
-                isToday          && "ring-2 ring-blue-500 ring-offset-1",
+                st === "absent" && "bg-rose-500/20 text-rose-700 dark:text-rose-300",
+                st === "leave" && "bg-amber-500/20 text-amber-700 dark:text-amber-300",
+                st === "holiday" && "bg-blue-500/20 text-blue-600 dark:text-blue-400",
+                !st && "bg-muted/50 text-muted-foreground",
+                isToday && "ring-2 ring-blue-500 ring-offset-1",
               )}
             >
               {day}
@@ -328,8 +337,9 @@ function StudentCalendar({ calData = {}, filter = "month", month = currentMonthI
       <div className="flex items-center gap-3 flex-wrap">
         {[
           { cls: "bg-emerald-500/60", label: "Present" },
-          { cls: "bg-rose-500/60",    label: "Absent"  },
-          { cls: "bg-amber-500/60",   label: "Leave"   },
+          { cls: "bg-rose-500/60", label: "Absent" },
+          { cls: "bg-amber-500/60", label: "Leave" },
+          { cls: "bg-slate-500/60", label: "Holiday" },
         ].map(({ cls, label }) => (
           <span key={label} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className={cn("size-2.5 rounded-sm inline-block", cls)} />
@@ -347,7 +357,7 @@ function StudentCalendar({ calData = {}, filter = "month", month = currentMonthI
 // ──────────────────────────────────────── Student Drawer Content ─────────────
 
 function StudentDrawerContent({ sid, studentName, courseName, summary, calData: initialCalData, currentMonth, fetchCalData }) {
-  const [filter,  setFilter]  = useState("month");
+  const [filter, setFilter] = useState("month");
   const [calData, setCalData] = useState(initialCalData ?? {});
   const [calLoading, setCalLoading] = useState(false);
 
@@ -356,13 +366,21 @@ function StudentDrawerContent({ sid, studentName, courseName, summary, calData: 
     ? monthDisplay(currentMonth)
     : filter === "3m" ? "Last 3 months" : "This year";
 
+  useEffect(() => {
+    setFilter("month");
+  }, [sid]);
+
+  useEffect(() => {
+    setCalData(initialCalData ?? {});
+  }, [sid, initialCalData]);
+
   // When filter changes, ensure we have the required years loaded
   const handleFilter = useCallback(async (f) => {
     setFilter(f);
     if (!fetchCalData) return;
     const now = new Date();
     const currentYear = now.getFullYear();
-    const prevYear    = currentYear - 1;
+    const prevYear = currentYear - 1;
 
     let years = [currentYear];
     if (f === "3m") {
@@ -440,7 +458,7 @@ function StudentDrawerContent({ sid, studentName, courseName, summary, calData: 
 function DayDrawerContent({ day, allStudents }) {
   if (!day) return null;
   const total = (day.present ?? 0) + (day.absent ?? 0) + (day.leave ?? 0);
-  const pct   = total > 0 ? Math.round((day.present / total) * 100) : 0;
+  const pct = total > 0 ? Math.round((day.present / total) * 100) : 0;
 
   return (
     <>
@@ -453,9 +471,9 @@ function DayDrawerContent({ day, allStudents }) {
           {allStudents.map((s, i) => {
             // Deterministic fake status from date + student index seed
             const seed = day.date.split("-").reduce((a, b) => a + Number(b), 0);
-            const r    = (Math.sin(seed * 31 + i * 97) * 0.5 + 0.5);
-            const st   = r < 0.72 ? "present" : r < 0.88 ? "absent" : "leave";
-            const cfg  = STATUS_CFG[st];
+            const r = (Math.sin(seed * 31 + i * 97) * 0.5 + 0.5);
+            const st = r < 0.72 ? "present" : r < 0.88 ? "absent" : "leave";
+            const cfg = STATUS_CFG[st];
             const { Icon } = cfg;
             return (
               <div key={s.student_id} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
@@ -483,7 +501,7 @@ function DayDrawerContent({ day, allStudents }) {
 
 function CourseDrawerContent({ course, students, onStudentClick }) {
   if (!course) return null;
-  const pct    = Math.round(course.percentage ?? 0);
+  const pct = Math.round(course.percentage ?? 0);
   const sorted = [...students].sort((a, b) => b.percentage - a.percentage);
 
   return (
@@ -491,8 +509,8 @@ function CourseDrawerContent({ course, students, onStudentClick }) {
       <BigPct pct={pct} sub={course.course_name} />
       <StatTriple
         present={course.present ?? 0}
-        absent={course.absent   ?? 0}
-        leave={course.leave     ?? 0}
+        absent={course.absent ?? 0}
+        leave={course.leave ?? 0}
       />
 
       <div className="rounded-xl border border-border bg-card p-4">
@@ -526,7 +544,7 @@ function CourseDrawerContent({ course, students, onStudentClick }) {
 // ════════════════════════════════════ MARK ATTENDANCE TAB ════════════════════
 
 function StatusButton({ status, isActive, onClick }) {
-  const cfg  = STATUS_CFG[status];
+  const cfg = STATUS_CFG[status];
   const Icon = cfg.Icon;
   return (
     <button
@@ -546,14 +564,14 @@ function StatusButton({ status, isActive, onClick }) {
 }
 
 function MarkAttendance({ onStudentClick }) {
-  const { toast }               = useToast();
-  const [date, setDate]         = useState(todayISO);
+  const { toast } = useToast();
+  const [date, setDate] = useState(todayISO);
   const [students, setStudents] = useState([]);
-  const [records,  setRecords]  = useState({});
+  const [records, setRecords] = useState({});
   const [savedSet, setSavedSet] = useState(() => new Set());
-  const [loading,  setLoading]  = useState(false);
-  const [saving,   setSaving]   = useState(false);
-  const [error,    setError]    = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   const fetchData = useCallback(async (d) => {
     setLoading(true);
@@ -597,10 +615,11 @@ function MarkAttendance({ onStudentClick }) {
   const counts = useMemo(() => {
     const vals = Object.values(records);
     return {
-      present : vals.filter(r => r.status === "present").length,
-      absent  : vals.filter(r => r.status === "absent").length,
-      leave   : vals.filter(r => r.status === "leave").length,
-      total   : vals.length,
+      present: vals.filter(r => r.status === "present").length,
+      absent: vals.filter(r => r.status === "absent").length,
+      leave: vals.filter(r => r.status === "leave").length,
+      holiday: vals.filter(r => r.status === "holiday").length,
+      total: vals.length,
     };
   }, [records]);
 
@@ -610,9 +629,9 @@ function MarkAttendance({ onStudentClick }) {
       const { data } = await api.post("/api/attendance/mark/", {
         date,
         records: students.map(s => ({
-          student : s.id,
-          status  : records[s.id]?.status ?? "absent",
-          note    : records[s.id]?.note   ?? "",
+          student: s.id,
+          status: records[s.id]?.status ?? "absent",
+          note: records[s.id]?.note ?? "",
         })),
       });
       setSavedSet(prev => new Set([...prev, date]));
@@ -629,8 +648,8 @@ function MarkAttendance({ onStudentClick }) {
     }
   };
 
-  const isToday   = date === todayISO();
-  const isSaved   = savedSet.has(date);
+  const isToday = date === todayISO();
+  const isSaved = savedSet.has(date);
 
   return (
     <div className="flex flex-col gap-5">
@@ -640,8 +659,8 @@ function MarkAttendance({ onStudentClick }) {
         <div>
           <p className="text-sm font-semibold text-foreground">{isoToDisplay(date)}</p>
           <div className="flex items-center gap-2 mt-1">
-            {isToday  && <Badge variant="secondary" className="text-xs">Today</Badge>}
-            {isSaved  && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 dark:text-blue-400">Previously saved</Badge>}
+            {isToday && <Badge variant="secondary" className="text-xs">Today</Badge>}
+            {isSaved && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 dark:text-blue-400">Previously saved</Badge>}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -669,11 +688,15 @@ function MarkAttendance({ onStudentClick }) {
       </div>
 
       {/* ── Pill stats ── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-3">
         {STATUSES.map(s => {
-          const cfg   = STATUS_CFG[s];
-          const count = counts[s];
-          const pct   = counts.total > 0 ? Math.round((count / counts.total) * 100) : 0;
+          const cfg = STATUS_CFG[s];
+          const count = counts[s] ?? 0;
+          // Holiday doesn't count toward percentage denominator
+          const denom = counts.total - (counts.holiday ?? 0);
+          const pct = s === "holiday"
+            ? null
+            : denom > 0 ? Math.round((count / denom) * 100) : 0;
           return (
             <div key={s} className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
               <span className={cn("size-2.5 shrink-0 rounded-full", cfg.dotCls)} />
@@ -681,7 +704,9 @@ function MarkAttendance({ onStudentClick }) {
                 <p className="text-xs text-muted-foreground">{cfg.label}</p>
                 <p className="text-lg font-bold leading-none">
                   {count}
-                  <span className="ml-1 text-xs font-normal text-muted-foreground">({pct}%)</span>
+                  {pct !== null && (
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">({pct}%)</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -747,7 +772,7 @@ function MarkAttendance({ onStudentClick }) {
             </TableHeader>
             <TableBody>
               {students.map((s, idx) => {
-                const st  = records[s.id]?.status ?? "absent";
+                const st = records[s.id]?.status ?? "absent";
                 const cfg = STATUS_CFG[st];
                 return (
                   <TableRow
@@ -792,8 +817,11 @@ function MarkAttendance({ onStudentClick }) {
               <span className="font-medium text-rose-600 dark:text-rose-400">{counts.absent} absent</span>
               {" · "}
               <span className="font-medium text-amber-600 dark:text-amber-400">{counts.leave} leave</span>
+              {(counts.holiday ?? 0) > 0 && (
+                <>{" · "}<span className="font-medium text-blue-600 dark:text-blue-400">{counts.holiday} holiday</span></>
+              )}
             </p>
-            <div className="flex justify-left">
+            <div className="flex justify-center">
               <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
                 {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
                 {saving ? "Saving…" : "Save Attendance"}
@@ -814,17 +842,18 @@ function DailyTrendChart({ data, onBarClick }) {
   const [hovered, setHovered] = useState(null);
   if (!data?.length) return null;
 
-  const maxVal = Math.max(...data.map(d => d.present + d.absent + d.leave), 1);
+  const maxVal = Math.max(...data.map(d => d.present + d.absent + d.leave + (d.holiday ?? 0)), 1);
 
   return (
     <div className="relative">
       {/* Bars */}
       <div className="flex items-end gap-[2px] h-36 w-full">
         {data.map((d, i) => {
-          const total = d.present + d.absent + d.leave;
+          const total = d.present + d.absent + d.leave + (d.holiday ?? 0);
           const pH = total > 0 ? (d.present / maxVal) * 100 : 0;
-          const aH = total > 0 ? (d.absent  / maxVal) * 100 : 0;
-          const lH = total > 0 ? (d.leave   / maxVal) * 100 : 0;
+          const aH = total > 0 ? (d.absent / maxVal) * 100 : 0;
+          const lH = total > 0 ? (d.leave / maxVal) * 100 : 0;
+          const hH = total > 0 ? ((d.holiday ?? 0) / maxVal) * 100 : 0;
           const isHov = hovered === i;
 
           return (
@@ -843,6 +872,7 @@ function DailyTrendChart({ data, onBarClick }) {
                   <p className="text-emerald-600">Present: {d.present}</p>
                   <p className="text-rose-600">Absent: {d.absent}</p>
                   <p className="text-amber-600">Leave: {d.leave}</p>
+                  {(d.holiday ?? 0) > 0 && <p className="text-slate-400">Holiday: {d.holiday}</p>}
                 </div>
               )}
               {/* Stacked bar segments */}
@@ -858,6 +888,10 @@ function DailyTrendChart({ data, onBarClick }) {
                 <div
                   className={cn("w-full transition-all duration-300", isHov ? "bg-amber-500" : "bg-amber-500/70")}
                   style={{ height: `${lH}%` }}
+                />
+                <div
+                  className={cn("w-full transition-all duration-300", isHov ? "bg-slate-400" : "bg-slate-400/70")}
+                  style={{ height: `${hH}%` }}
                 />
               </div>
               {/* X label */}
@@ -875,12 +909,12 @@ function DailyTrendChart({ data, onBarClick }) {
 }
 
 function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportLoad }) {
-  const [month,      setMonth]      = useState(currentMonthISO);
-  const [report,     setReport]     = useState(null);
-  const [todayList,  setTodayList]  = useState([]);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState("");
-  const [sortBy,     setSortBy]     = useState("name");
+  const [month, setMonth] = useState(currentMonthISO);
+  const [report, setReport] = useState(null);
+  const [todayList, setTodayList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [sortBy, setSortBy] = useState("name");
 
   const fetchReport = useCallback(async (m) => {
     setLoading(true);
@@ -888,7 +922,7 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
     try {
       const [rR, tR] = await Promise.all([
         api.get("/api/attendance/report/", { params: { month: m } }),
-        api.get("/api/attendance/",         { params: { date: todayISO() } }),
+        api.get("/api/attendance/", { params: { date: todayISO() } }),
       ]);
       const data = rR.data;
       setReport(data);
@@ -925,9 +959,9 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
   );
 
   const todayPresent = todayList.filter(a => a.status === "present").length;
-  const todayAbsent  = todayList.filter(a => a.status === "absent").length;
-  const todayLeave   = todayList.filter(a => a.status === "leave").length;
-  const todayMarked  = todayList.length > 0;
+  const todayAbsent = todayList.filter(a => a.status === "absent").length;
+  const todayLeave = todayList.filter(a => a.status === "leave").length;
+  const todayMarked = todayList.length > 0;
   const isCurrentMonth = month === currentMonthISO();
 
 
@@ -1016,8 +1050,8 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
                 <MousePointerClick className="size-3" />Click any bar to see that day's details
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              {[["bg-emerald-500/70","Present"],["bg-rose-500/70","Absent"],["bg-amber-500/70","Leave"]].map(([cls, l]) => (
+            <div className="flex items-center gap-3 flex-wrap">
+              {[["bg-emerald-500/70", "Present"], ["bg-rose-500/70", "Absent"], ["bg-amber-500/70", "Leave"], ["bg-slate-400/70", "Holiday"]].map(([cls, l]) => (
                 <span key={l} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <span className={cn("size-2.5 rounded-sm inline-block", cls)} />{l}
                 </span>
@@ -1141,7 +1175,7 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
           </p>
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground hidden sm:inline">Sort:</span>
-            {[["name","Name"],["pct","% ↑"],["abs","Absent ↓"]].map(([k, label]) => (
+            {[["name", "Name"], ["pct", "% ↑"], ["abs", "Absent ↓"]].map(([k, label]) => (
               <button
                 key={k}
                 onClick={() => setSortBy(k)}
@@ -1242,7 +1276,7 @@ export default function Attendance() {
   // Cache: summaryCache[sid] = summary obj
   //        calCache[sid][year] = { "YYYY-MM-DD": "present"|"absent"|"leave" }
   const summaryCache = useRef({});
-  const calCache     = useRef({});
+  const calCache = useRef({});
 
   const closeDrawer = useCallback(() =>
     setDrawer(prev => ({ ...prev, open: false })), []);
@@ -1270,7 +1304,7 @@ export default function Attendance() {
   }, []);
 
   const openStudentDrawer = useCallback(async (sid, studentObj) => {
-    const name   = studentObj?.name ?? studentObj?.student_name ?? "Student";
+    const name = studentObj?.name ?? studentObj?.student_name ?? "Student";
     const course = studentObj?.course_name ?? "—";
 
     // Open immediately — show loading skeleton
@@ -1304,8 +1338,8 @@ export default function Attendance() {
   }, [fetchCalData]);
 
   const openCourseDrawer = useCallback((courseName) => {
-    const rd       = reportDataRef.current;
-    const course   = rd?.course_summary?.find(c => c.course_name === courseName) ?? null;
+    const rd = reportDataRef.current;
+    const course = rd?.course_summary?.find(c => c.course_name === courseName) ?? null;
     const students = (rd?.students ?? []).filter(s => s.course_name === courseName);
     setDrawer({ open: true, mode: "course", data: { course, students, courseName } });
   }, []);
@@ -1329,19 +1363,19 @@ export default function Attendance() {
     if (!drawer.data) return "Details";
     switch (drawer.mode) {
       case "student": return drawer.data.name;
-      case "course":  return drawer.data.courseName;
-      case "day":     return `${shortDate(drawer.data.day?.date ?? "")} — Daily Summary`;
-      default:        return "Details";
+      case "course": return drawer.data.courseName;
+      case "day": return `${shortDate(drawer.data.day?.date ?? "")} — Daily Summary`;
+      default: return "Details";
     }
   })();
 
   const drawerIcon = drawer.mode === "course" ? BookOpen
-    : drawer.mode === "day"     ? CalendarCheck
-    : User;
+    : drawer.mode === "day" ? CalendarCheck
+      : User;
 
   const TABS = [
-    { key: "mark",   label: "Mark Attendance",   Icon: ClipboardList },
-    { key: "report", label: "Attendance Report",  Icon: BarChart2     },
+    { key: "mark", label: "Mark Attendance", Icon: ClipboardList },
+    { key: "report", label: "Attendance Report", Icon: BarChart2 },
   ];
 
   return (
