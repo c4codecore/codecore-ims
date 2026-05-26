@@ -75,7 +75,8 @@ def sync_all(request):
 @permission_classes([IsAuthenticated])
 def student_list(request):
     status = request.query_params.get("status")
-    students = Student.objects.all().order_by("name")
+    # students = Student.objects.all().order_by("name")
+    students = Student.objects.select_related("course").order_by("name")
     if status:
         students = students.filter(status=status)
     return Response(StudentSerializer(students, many=True).data)
@@ -85,13 +86,13 @@ def student_list(request):
 @permission_classes([IsAuthenticated])
 def student_detail(request, pk):
     try:
-        student = Student.objects.get(pk=pk)
+        student = Student.objects.select_related("course").get(pk=pk)
     except Student.DoesNotExist:
         return Response({"error": "Student not found"}, status=404)
-
+ 
     if request.method == "GET":
         return Response(StudentSerializer(student).data)
-
+ 
     serializer = StudentSerializer(student, data=request.data, partial=True)
     if serializer.is_valid():
         serializer.save()

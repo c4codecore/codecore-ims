@@ -1,16 +1,13 @@
 /**
  * Attendance.jsx  —  CodeCore IMS
  *
- * Features:
- *  • Mark Attendance tab  — date nav, bulk set, per-student toggle, save
- *  • Attendance Report tab — KPI cards, monthly trend chart (recharts),
- *    course summary, needs-attention, follow-up, student table (sortable)
- *  • Slide-in Drawer (portal) for:
- *      - Student details  →  summary stats + calendar heatmap (month / 3m / year)
- *      - Course drill-down →  course stats + all students (click → student drawer)
- *      - Day drill-down   →  that day's P/A/L per student
- *  • Every row / bar / card is clickable
- *  • react-chartjs-2 NOT used — recharts only (already in project)
+ * Bug fixes applied:
+ *  Bug 2  — DayDrawerContent: fake/random data hata diya, real API call lagaya
+ *  Bug 4  — fetchData: a.student === s.id match fix (integer cast)
+ *  Bug 6  — Report tab: future months navigate nahi ho sakte ab
+ *  Bug 7  — StudentDrawerContent: summary label "Overall attendance" kar diya (filter-independent)
+ *  Bug 8  — Mark Attendance: future date navigate nahi ho sakta ab
+ *  Bug 9  — openStudentDrawer: duplicate `sid` key hata diya
  */
 
 import React, {
@@ -196,13 +193,11 @@ function SectionLabel({ icon: Icon, children }) {
 // ──────────────────────────────────────────────────────────── Drawer ─────────
 
 function Drawer({ open, onClose, title, icon: Icon = User, children }) {
-  // lock scroll
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  // close on Escape
   useEffect(() => {
     if (!open) return;
     const handler = (e) => { if (e.key === "Escape") onClose(); };
@@ -212,7 +207,6 @@ function Drawer({ open, onClose, title, icon: Icon = User, children }) {
 
   return createPortal(
     <>
-      {/* Backdrop */}
       <div
         aria-hidden="true"
         onClick={onClose}
@@ -221,8 +215,6 @@ function Drawer({ open, onClose, title, icon: Icon = User, children }) {
           open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none",
         )}
       />
-
-      {/* Panel */}
       <aside
         role="dialog"
         aria-modal="true"
@@ -234,7 +226,6 @@ function Drawer({ open, onClose, title, icon: Icon = User, children }) {
           open ? "translate-x-0" : "translate-x-full",
         )}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/95 backdrop-blur sticky top-0 z-10">
           <div className="flex items-center gap-2.5 font-semibold text-foreground text-sm">
             {Icon && <Icon className="size-4 text-muted-foreground shrink-0" />}
@@ -248,8 +239,6 @@ function Drawer({ open, onClose, title, icon: Icon = User, children }) {
             <X className="size-4" />
           </button>
         </div>
-
-        {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4">
           {children}
         </div>
@@ -284,8 +273,8 @@ function CalendarMonth({ year, month, data = {} }) {
       <div className="grid grid-cols-7 gap-0.5">
         {cells.map(({ day, key }) => {
           if (!day) return <div key={key} />;
-          const iso = `${year}-${p2(month)}-${p2(day)}`;
-          const st  = data[iso];
+          const iso     = `${year}-${p2(month)}-${p2(day)}`;
+          const st      = data[iso];
           const isToday = iso === todayISO();
           return (
             <div
@@ -346,28 +335,33 @@ function StudentCalendar({ calData = {}, filter = "month", month = currentMonthI
 
 // ──────────────────────────────────────── Student Drawer Content ─────────────
 
-function StudentDrawerContent({ sid, studentName, courseName, summary, calData: initialCalData, currentMonth, fetchCalData }) {
-  const [filter,  setFilter]  = useState("month");
-  const [calData, setCalData] = useState(initialCalData ?? {});
+function StudentDrawerContent({
+  sid, studentName, courseName, summary, calData: initialCalData, currentMonth, fetchCalData,
+}) {
+  const [filter,     setFilter]     = useState("month");
+  const [calData,    setCalData]    = useState(initialCalData ?? {});
   const [calLoading, setCalLoading] = useState(false);
 
   const pct = summary ? Math.round(summary.percentage ?? 0) : 0;
-  const filterLabel = filter === "month"
-    ? monthDisplay(currentMonth)
-    : filter === "3m" ? "Last 3 months" : "This year";
 
-  // When filter changes, ensure we have the required years loaded
+  useEffect(() => {
+    setFilter("month");
+  }, [sid]);
+
+  useEffect(() => {
+    setCalData(initialCalData ?? {});
+  }, [sid, initialCalData]);
+
   const handleFilter = useCallback(async (f) => {
     setFilter(f);
     if (!fetchCalData) return;
-    const now = new Date();
+    const now         = new Date();
     const currentYear = now.getFullYear();
     const prevYear    = currentYear - 1;
 
     let years = [currentYear];
     if (f === "3m") {
-      // If we're in Jan/Feb/Mar, 3 months back may cross into prev year
-      const monthIndex = now.getMonth(); // 0-based
+      const monthIndex = now.getMonth();
       if (monthIndex < 3) years = [prevYear, currentYear];
     }
     if (f === "year") {
@@ -411,13 +405,14 @@ function StudentDrawerContent({ sid, studentName, courseName, summary, calData: 
         ))}
       </div>
 
-      {/* Big percentage */}
+      {/* Bug 7 fix: label "Overall attendance" — filter tabs calendar ko
+          control karte hain, summary stats overall lifetime hain.
+          Misleading "This month / 3 months / This year" sub-label hata diya. */}
       {summary
-        ? <BigPct pct={pct} sub={`Attendance — ${filterLabel}`} />
+        ? <BigPct pct={pct} sub="Overall attendance" />
         : <div className="h-24 rounded-xl bg-muted/40 animate-pulse" />
       }
 
-      {/* Stats triple */}
       {summary
         ? <StatTriple present={summary.present} absent={summary.absent} leave={summary.leave} />
         : <div className="h-16 rounded-xl bg-muted/40 animate-pulse" />
@@ -437,8 +432,13 @@ function StudentDrawerContent({ sid, studentName, courseName, summary, calData: 
 
 // ──────────────────────────────────────────── Day Drawer Content ─────────────
 
-function DayDrawerContent({ day, allStudents }) {
+function DayDrawerContent({ day, dayRecords, dayLoading }) {
+  // Bug 2 fix: ab real API data use hota hai — fake math hata diya.
+  // dayRecords = [{ student_id, student_name, course_name, status }, ...]
+  // dayLoading = boolean
+
   if (!day) return null;
+
   const total = (day.present ?? 0) + (day.absent ?? 0) + (day.leave ?? 0);
   const pct   = total > 0 ? Math.round((day.present / total) * 100) : 0;
 
@@ -449,31 +449,41 @@ function DayDrawerContent({ day, allStudents }) {
 
       <div className="rounded-xl border border-border bg-card p-4">
         <SectionLabel icon={Users}>Students — {shortDate(day.date)}</SectionLabel>
-        <div className="space-y-1.5">
-          {allStudents.map((s, i) => {
-            // Deterministic fake status from date + student index seed
-            const seed = day.date.split("-").reduce((a, b) => a + Number(b), 0);
-            const r    = (Math.sin(seed * 31 + i * 97) * 0.5 + 0.5);
-            const st   = r < 0.72 ? "present" : r < 0.88 ? "absent" : "leave";
-            const cfg  = STATUS_CFG[st];
-            const { Icon } = cfg;
-            return (
-              <div key={s.student_id} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
-                <Avatar name={s.student_name} status={st} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{s.student_name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{s.course_name}</p>
+
+        {dayLoading && (
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+            <Loader2 className="size-6 animate-spin" />
+            <p className="text-sm">Loading students…</p>
+          </div>
+        )}
+
+        {!dayLoading && dayRecords.length === 0 && (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No attendance data for this day
+          </p>
+        )}
+
+        {!dayLoading && dayRecords.length > 0 && (
+          <div className="space-y-1.5">
+            {dayRecords.map((s) => {
+              const st  = s.status ?? "absent";
+              const cfg = STATUS_CFG[st] ?? STATUS_CFG.absent;
+              const { Icon } = cfg;
+              return (
+                <div key={s.student_id ?? s.student} className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2">
+                  <Avatar name={s.student_name ?? s.name ?? "?"} status={st} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{s.student_name ?? s.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{s.course_name ?? "—"}</p>
+                  </div>
+                  <span className={cn("text-xs font-medium flex items-center gap-1 shrink-0", cfg.textCls)}>
+                    <Icon className="size-3" />{cfg.label}
+                  </span>
                 </div>
-                <span className={cn("text-xs font-medium flex items-center gap-1 shrink-0", cfg.textCls)}>
-                  <Icon className="size-3" />{cfg.label}
-                </span>
-              </div>
-            );
-          })}
-          {allStudents.length === 0 && (
-            <p className="py-4 text-center text-sm text-muted-foreground">No student data available</p>
-          )}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
@@ -571,7 +581,10 @@ function MarkAttendance({ onStudentClick }) {
 
       const map = {};
       sList.forEach(s => {
-        const f = aList.find(a => a.student === s.id);
+        // Bug 4 fix: a.student ko integer cast karke compare karo.
+        // AttendanceSerializer mein student PrimaryKeyRelatedField hai (integer),
+        // lekin JSON parse ke baad kabhi kabhi comparison type mismatch ho sakti thi.
+        const f = aList.find(a => Number(a.student) === Number(s.id));
         map[s.id] = { status: f?.status ?? "absent", note: f?.note ?? "" };
       });
       setRecords(map);
@@ -629,8 +642,13 @@ function MarkAttendance({ onStudentClick }) {
     }
   };
 
-  const isToday   = date === todayISO();
-  const isSaved   = savedSet.has(date);
+  const isToday = date === todayISO();
+  const isSaved = savedSet.has(date);
+
+  // Bug 8 fix: future date navigate nahi hona chahiye.
+  // Pehle sirf isToday check tha — agar user past date pe tha
+  // toh wo today se aage ja sakta tha.
+  const isFutureOrToday = date >= todayISO();
 
   return (
     <div className="flex flex-col gap-5">
@@ -640,8 +658,8 @@ function MarkAttendance({ onStudentClick }) {
         <div>
           <p className="text-sm font-semibold text-foreground">{isoToDisplay(date)}</p>
           <div className="flex items-center gap-2 mt-1">
-            {isToday  && <Badge variant="secondary" className="text-xs">Today</Badge>}
-            {isSaved  && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 dark:text-blue-400">Previously saved</Badge>}
+            {isToday && <Badge variant="secondary" className="text-xs">Today</Badge>}
+            {isSaved && <Badge variant="outline" className="text-xs text-blue-600 border-blue-300 dark:text-blue-400">Previously saved</Badge>}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -651,10 +669,21 @@ function MarkAttendance({ onStudentClick }) {
           </Button>
           <div className="relative">
             <CalendarCheck className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="pl-9 w-44" />
+            <Input
+              type="date"
+              value={date}
+              max={todayISO()}
+              onChange={e => {
+                // Bug 8 fix: input se bhi future date block karo
+                if (e.target.value <= todayISO()) setDate(e.target.value);
+              }}
+              className="pl-9 w-44"
+            />
           </div>
+          {/* Bug 8 fix: isFutureOrToday use kiya — past date pe bhi future navigate nahi hoga */}
           <Button variant="outline" size="icon" className="size-8"
-            onClick={() => setDate(d => shiftDay(d, 1))} disabled={isToday}>
+            onClick={() => setDate(d => shiftDay(d, 1))}
+            disabled={isFutureOrToday}>
             <ChevronRight className="size-4" />
           </Button>
           {!isToday && (
@@ -718,7 +747,6 @@ function MarkAttendance({ onStudentClick }) {
           </div>
         </div>
 
-        {/* Loading */}
         {loading && (
           <div className="flex flex-col items-center justify-center gap-3 py-20 text-muted-foreground">
             <Loader2 className="size-8 animate-spin" />
@@ -726,7 +754,6 @@ function MarkAttendance({ onStudentClick }) {
           </div>
         )}
 
-        {/* Empty */}
         {!loading && students.length === 0 && (
           <div className="flex flex-col items-center justify-center gap-2 py-20 text-muted-foreground">
             <Users className="size-10 opacity-30" />
@@ -734,7 +761,6 @@ function MarkAttendance({ onStudentClick }) {
           </div>
         )}
 
-        {/* Table */}
         {!loading && students.length > 0 && (
           <Table>
             <TableHeader>
@@ -768,7 +794,6 @@ function MarkAttendance({ onStudentClick }) {
                     <TableCell className="hidden sm:table-cell">
                       <Badge variant="secondary" className="font-normal">{s.course_name ?? "—"}</Badge>
                     </TableCell>
-                    {/* Stop row click from firing when toggling status */}
                     <TableCell onClick={e => e.stopPropagation()}>
                       <div className="flex flex-wrap gap-1">
                         {STATUSES.map(x => (
@@ -784,7 +809,6 @@ function MarkAttendance({ onStudentClick }) {
           </Table>
         )}
 
-        {/* Footer */}
         {!loading && students.length > 0 && (
           <div className="flex items-center justify-between border-t border-border bg-muted/30 px-4 py-3">
             <p className="text-xs text-muted-foreground">
@@ -807,7 +831,6 @@ function MarkAttendance({ onStudentClick }) {
 
 // ════════════════════════════════════ ATTENDANCE REPORT TAB ══════════════════
 
-// ── Pure CSS stacked bar chart (no external lib) ────────────────────────────
 function DailyTrendChart({ data, onBarClick }) {
   const [hovered, setHovered] = useState(null);
   if (!data?.length) return null;
@@ -816,13 +839,12 @@ function DailyTrendChart({ data, onBarClick }) {
 
   return (
     <div className="relative">
-      {/* Bars */}
       <div className="flex items-end gap-[2px] h-36 w-full">
         {data.map((d, i) => {
           const total = d.present + d.absent + d.leave;
-          const pH = total > 0 ? (d.present / maxVal) * 100 : 0;
-          const aH = total > 0 ? (d.absent  / maxVal) * 100 : 0;
-          const lH = total > 0 ? (d.leave   / maxVal) * 100 : 0;
+          const pH    = total > 0 ? (d.present / maxVal) * 100 : 0;
+          const aH    = total > 0 ? (d.absent  / maxVal) * 100 : 0;
+          const lH    = total > 0 ? (d.leave   / maxVal) * 100 : 0;
           const isHov = hovered === i;
 
           return (
@@ -834,7 +856,6 @@ function DailyTrendChart({ data, onBarClick }) {
               onMouseEnter={() => setHovered(i)}
               onMouseLeave={() => setHovered(null)}
             >
-              {/* Tooltip */}
               {isHov && (
                 <div className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-20 pointer-events-none whitespace-nowrap rounded-lg border border-border bg-popover px-2.5 py-2 text-[11px] shadow-lg">
                   <p className="font-medium text-foreground mb-1">{shortDate(d.date)}</p>
@@ -843,7 +864,6 @@ function DailyTrendChart({ data, onBarClick }) {
                   <p className="text-amber-600">Leave: {d.leave}</p>
                 </div>
               )}
-              {/* Stacked bar segments */}
               <div className="flex flex-col-reverse w-full rounded-sm overflow-hidden" style={{ height: "100%" }}>
                 <div
                   className={cn("w-full transition-all duration-300", isHov ? "bg-emerald-500" : "bg-emerald-500/70")}
@@ -858,7 +878,6 @@ function DailyTrendChart({ data, onBarClick }) {
                   style={{ height: `${lH}%` }}
                 />
               </div>
-              {/* X label */}
               <p className="absolute -bottom-5 left-0 right-0 text-center text-[8px] text-muted-foreground truncate">
                 {shortDate(d.date).split(" ")[0]}
               </p>
@@ -866,19 +885,18 @@ function DailyTrendChart({ data, onBarClick }) {
           );
         })}
       </div>
-      {/* X axis spacing */}
       <div className="h-5" />
     </div>
   );
 }
 
 function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportLoad }) {
-  const [month,      setMonth]      = useState(currentMonthISO);
-  const [report,     setReport]     = useState(null);
-  const [todayList,  setTodayList]  = useState([]);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState("");
-  const [sortBy,     setSortBy]     = useState("name");
+  const [month,   setMonth]   = useState(currentMonthISO);
+  const [report,  setReport]  = useState(null);
+  const [todayList, setTodayList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+  const [sortBy,  setSortBy]  = useState("name");
 
   const fetchReport = useCallback(async (m) => {
     setLoading(true);
@@ -890,7 +908,7 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
       ]);
       const data = rR.data;
       setReport(data);
-      onReportLoad?.(data);                                   // ← lift to parent
+      onReportLoad?.(data);
       const tl = Array.isArray(tR.data) ? tR.data : (tR.data.results ?? []);
       setTodayList(tl);
     } catch (e) {
@@ -926,9 +944,12 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
   const todayAbsent  = todayList.filter(a => a.status === "absent").length;
   const todayLeave   = todayList.filter(a => a.status === "leave").length;
   const todayMarked  = todayList.length > 0;
+
+  // Bug 6 fix: future months navigate nahi hone chahiye.
+  // Pehle sirf isCurrentMonth check tha — lekin agar user manually
+  // past month pe chala gaya aur wapas aaya toh future mein ja sakta tha.
   const isCurrentMonth = month === currentMonthISO();
-
-
+  const isFutureMonth  = month >= currentMonthISO();
 
   return (
     <div className="flex flex-col gap-5">
@@ -981,8 +1002,11 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
             <ChevronLeft className="size-4" />
           </Button>
           <span className="text-sm font-semibold min-w-36 text-center">{monthDisplay(month)}</span>
+          {/* Bug 6 fix: isFutureMonth use kiya — current month pe bhi aur
+              future months pe bhi next button disabled rahega */}
           <Button variant="outline" size="icon" className="size-8"
-            onClick={() => setMonth(m => shiftMonth(m, 1))} disabled={isCurrentMonth}>
+            onClick={() => setMonth(m => shiftMonth(m, 1))}
+            disabled={isFutureMonth}>
             <ChevronRight className="size-4" />
           </Button>
           {!isCurrentMonth && (
@@ -1004,7 +1028,7 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
         </div>
       )}
 
-      {/* ── Daily trend chart (pure CSS, no lib) ── */}
+      {/* ── Daily trend chart ── */}
       {(report?.daily_trend?.length ?? 0) > 0 && (
         <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -1231,21 +1255,21 @@ function AttendanceReport({ onStudentClick, onCourseClick, onDayClick, onReportL
 export default function Attendance() {
   const [activeTab, setActiveTab] = useState("mark");
 
-  // Shared report data — lifted from AttendanceReport so drawers can read it
   const reportDataRef = useRef(null);
 
-  // Drawer
+  // Drawer state
   const [drawer, setDrawer] = useState({ open: false, mode: null, data: null });
 
-  // Cache: summaryCache[sid] = summary obj
-  //        calCache[sid][year] = { "YYYY-MM-DD": "present"|"absent"|"leave" }
+  // Bug 2 fix: day drawer ke liye real API data state
+  const [dayRecords, setDayRecords]   = useState([]);
+  const [dayLoading, setDayLoading]   = useState(false);
+
   const summaryCache = useRef({});
   const calCache     = useRef({});
 
   const closeDrawer = useCallback(() =>
     setDrawer(prev => ({ ...prev, open: false })), []);
 
-  // Fetch real calendar data for given years; merges into flat map
   const fetchCalData = useCallback(async (sid, years = [new Date().getFullYear()]) => {
     if (!calCache.current[sid]) calCache.current[sid] = {};
     const missing = years.filter(y => !calCache.current[sid][y]);
@@ -1257,7 +1281,7 @@ export default function Attendance() {
         });
         calCache.current[sid][year] = data.records ?? {};
       } catch {
-        calCache.current[sid][year] = {}; // blank on error — no fake data
+        calCache.current[sid][year] = {};
       }
     }));
 
@@ -1271,12 +1295,10 @@ export default function Attendance() {
     const name   = studentObj?.name ?? studentObj?.student_name ?? "Student";
     const course = studentObj?.course_name ?? "—";
 
-    // Open immediately — show loading skeleton
     setDrawer({ open: true, mode: "student", data: { sid, name, course, summary: null, calData: {} } });
 
     const currentYear = new Date().getFullYear();
 
-    // Fetch summary + current year calendar in parallel
     const [, calData] = await Promise.all([
       (async () => {
         if (!summaryCache.current[sid]) {
@@ -1294,10 +1316,11 @@ export default function Attendance() {
       fetchCalData(sid, [currentYear]),
     ]);
 
+    // Bug 9 fix: duplicate `sid` key hata diya
     setDrawer({
       open: true,
       mode: "student",
-      data: { sid, name, course, summary: summaryCache.current[sid], calData, sid, fetchCalData },
+      data: { sid, name, course, summary: summaryCache.current[sid], calData, fetchCalData },
     });
   }, [fetchCalData]);
 
@@ -1308,12 +1331,28 @@ export default function Attendance() {
     setDrawer({ open: true, mode: "course", data: { course, students, courseName } });
   }, []);
 
-  const openDayDrawer = useCallback((day) => {
+  // Bug 2 fix: day drawer mein real API data fetch karo
+  const openDayDrawer = useCallback(async (day) => {
     const rd = reportDataRef.current;
     setDrawer({ open: true, mode: "day", data: { day, allStudents: rd?.students ?? [] } });
+
+    // Real attendance records us date ke liye fetch karo
+    setDayRecords([]);
+    setDayLoading(true);
+    try {
+      const { data } = await api.get("/api/attendance/", { params: { date: day.date } });
+      const records  = Array.isArray(data) ? data : (data.results ?? []);
+
+      // Attendance records mein student_name aur course_name
+      // AttendanceSerializer se aate hain (student_name, course_name fields hain)
+      setDayRecords(records);
+    } catch {
+      setDayRecords([]);
+    } finally {
+      setDayLoading(false);
+    }
   }, []);
 
-  // Cascade: course → student drawer
   const handleCourseStudentClick = useCallback((sid, studentObj) => {
     closeDrawer();
     setTimeout(() => openStudentDrawer(sid, studentObj), 280);
@@ -1338,8 +1377,8 @@ export default function Attendance() {
     : User;
 
   const TABS = [
-    { key: "mark",   label: "Mark Attendance",   Icon: ClipboardList },
-    { key: "report", label: "Attendance Report",  Icon: BarChart2     },
+    { key: "mark",   label: "Mark Attendance",  Icon: ClipboardList },
+    { key: "report", label: "Attendance Report", Icon: BarChart2     },
   ];
 
   return (
@@ -1409,10 +1448,12 @@ export default function Attendance() {
           />
         )}
 
+        {/* Bug 2 fix: real dayRecords aur dayLoading pass kiye */}
         {drawer.open && drawer.mode === "day" && drawer.data && (
           <DayDrawerContent
             day={drawer.data.day}
-            allStudents={drawer.data.allStudents}
+            dayRecords={dayRecords}
+            dayLoading={dayLoading}
           />
         )}
 
