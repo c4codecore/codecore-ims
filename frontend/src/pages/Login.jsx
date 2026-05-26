@@ -108,7 +108,7 @@ export default function Login() {
                 type="text"
                 autoComplete="username"
                 autoFocus
-                placeholder="e.g. john_doe"
+                placeholder="e.g. code_core"
                 value={form.username}
                 onChange={handleChange}
                 aria-invalid={!!error || undefined}
