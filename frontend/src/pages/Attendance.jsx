@@ -785,7 +785,7 @@ function MarkAttendance({ onStudentClick }) {
 
         {/* Footer */}
         {!loading && students.length > 0 && (
-          <div className="flex items-center justify-between border-t border-border bg-muted/30 px-4 py-3">
+          <div className="grid grid-cols-3 items-center border-t border-border bg-muted/30 px-4 py-3">
             <p className="text-xs text-muted-foreground">
               <span className="font-medium text-emerald-600 dark:text-emerald-400">{counts.present} present</span>
               {" · "}
@@ -793,10 +793,13 @@ function MarkAttendance({ onStudentClick }) {
               {" · "}
               <span className="font-medium text-amber-600 dark:text-amber-400">{counts.leave} leave</span>
             </p>
-            <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
-              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-              {saving ? "Saving…" : "Save Attendance"}
-            </Button>
+            <div className="flex justify-left">
+              <Button size="sm" onClick={handleSave} disabled={saving} className="gap-1.5">
+                {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+                {saving ? "Saving…" : "Save Attendance"}
+              </Button>
+            </div>
+            <div />
           </div>
         )}
       </div>
