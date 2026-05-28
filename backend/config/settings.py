@@ -124,8 +124,12 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5174",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
-    "http://192.168.1.7:5173",
-    "http://192.168.1.7:8000",
+    "http://192.168.1.4:5173",
+    "http://192.168.1.4:8000",
+]
+
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://192\.168\.\d+\.\d+:(5173|5174|8000)$",
 ]
 
 SIMPLE_JWT = {

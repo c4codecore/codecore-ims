@@ -156,14 +156,22 @@ npm run dev -- --host 0.0.0.0
 Open the app from any device on the same WiFi:
 
 ```text
-http://192.168.1.7:5173
+http://192.168.1.4:5173
 ```
 
 Backend/API URL:
 
 ```text
-http://192.168.1.7:8000
+http://192.168.1.4:8000
 ```
+
+Your WiFi IP can change when the adapter/router changes. To find the current IP on Windows, run:
+
+```powershell
+ipconfig
+```
+
+Use the `IPv4 Address` shown under your active WiFi adapter.
 
 If the site does not open on another device, allow Python and Node.js through Windows Firewall for Private networks.
 
