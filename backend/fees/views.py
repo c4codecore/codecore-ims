@@ -240,3 +240,128 @@ def send_receipt(request):
 
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+from datetime import date
+from calendar import monthrange
+
+def get_monthly_due_date(start_date, today):
+    """
+    start_date ki day se is mahine ki due date nikalo.
+    Agar wo din is mahine mein nahi hai (jaise Feb mein 31), 
+    to mahine ka last day use karo.
+    """
+    day = start_date.day
+    last_day = monthrange(today.year, today.month)[1]
+    due_day = min(day, last_day)
+    return date(today.year, today.month, due_day)
+
+
+def has_paid_this_month(fee_structure, today):
+    """
+    Is mahine mein koi payment aayi hai kya —
+    due date se pehle ya baad kisi bhi din.
+    """
+    return fee_structure.payments.filter(
+        payment_date__year=today.year,
+        payment_date__month=today.month,
+    ).exists()
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def fee_due_reminders(request):
+    """
+    Woh students jo is mahine fees nahi diye
+    aur jinki due date aa gayi hai ya 2 din mein aane wali hai.
+
+    Response mein teen buckets:
+      overdue  — due date nikal gayi, payment nahi
+      due_soon — aaj ya 2 din baad due hai
+      upcoming — 3-7 din baad due (optional preview)
+    """
+    today = date.today()
+    REMIND_DAYS_BEFORE = 2   # kitne din pehle list mein aaye
+
+    overdue   = []
+    due_soon  = []
+    upcoming  = []
+
+    fee_structures = (
+        FeeStructure.objects
+        .select_related(
+            "enrollment__student",
+            "enrollment__course",
+        )
+        .prefetch_related("payments")
+        .filter(enrollment__status="active")
+    )
+
+    for fs in fee_structures:
+        enrollment = fs.enrollment
+
+        # Course khatam ho gaya ho to skip
+        if enrollment.end_date and enrollment.end_date < today:
+            continue
+
+        # start_date nahi hai to skip
+        if not enrollment.start_date:
+            continue
+
+        due_date = get_monthly_due_date(enrollment.start_date, today)
+
+        # Is mahine pay kar diya? Skip.
+        if has_paid_this_month(fs, today):
+            continue
+
+        days_until_due = (due_date - today).days  # negative = overdue
+
+        student = enrollment.student
+        base = {
+            "fee_structure_id" : fs.id,
+            "student_id"       : student.id,
+            "student_name"     : student.name,
+            "father_name"      : student.father_name,
+            "phone"            : student.phone,
+            "roll_no"          : enrollment.roll_no,
+            "course_name"      : enrollment.course.name if enrollment.course else "—",
+            "due_date"         : due_date.isoformat(),
+            "days_until_due"   : days_until_due,
+            "balance"          : float(fs.balance),
+            "final_fee"        : float(fs.final_fee),
+            "last_payment_date": None,
+            "photo_url"        : student.photo_url if hasattr(student, "photo_url") else None,
+        }
+
+        # Last payment date bhi bhejo (helpful for display)
+        last_pay = fs.payments.order_by("-payment_date").first()
+        if last_pay:
+            base["last_payment_date"] = last_pay.payment_date.isoformat()
+
+        if days_until_due < 0:
+            base["overdue_days"] = abs(days_until_due)
+            overdue.append(base)
+        elif days_until_due <= REMIND_DAYS_BEFORE:
+            due_soon.append(base)
+        elif days_until_due <= 7:
+            upcoming.append(base)
+
+    # Overdue: sabse zyada baaki wale pehle
+    overdue.sort(key=lambda x: x["overdue_days"], reverse=True)
+    # Due soon: jo sabse pehle due hai wo pehle
+    due_soon.sort(key=lambda x: x["days_until_due"])
+    upcoming.sort(key=lambda x: x["days_until_due"])
+
+    return Response({
+        "today"         : today.isoformat(),
+        "remind_before" : REMIND_DAYS_BEFORE,
+        "summary": {
+            "overdue_count"  : len(overdue),
+            "due_soon_count" : len(due_soon),
+            "upcoming_count" : len(upcoming),
+            "total_overdue_balance": sum(s["balance"] for s in overdue),
+        },
+        "overdue"  : overdue,
+        "due_soon" : due_soon,
+        "upcoming" : upcoming,
+    })
