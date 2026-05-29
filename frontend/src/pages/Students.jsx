@@ -543,7 +543,6 @@ export default function Students() {
                   <SortableHead label="Father Name" field="father_name" sortConfig={sortConfig} onSort={handleSort} className="hidden lg:table-cell" />
                   <SortableHead label="Phone" field="phone" sortConfig={sortConfig} onSort={handleSort} className="hidden sm:table-cell" />
                   <SortableHead label="Course" field="course" sortConfig={sortConfig} onSort={handleSort} />
-                  <SortableHead label="Join Date" field="join_date" sortConfig={sortConfig} onSort={handleSort} className="hidden md:table-cell" />
                   <SortableHead label="Status" field="status" sortConfig={sortConfig} onSort={handleSort} />
                 </TableRow>
               </TableHeader>
@@ -575,9 +574,7 @@ export default function Students() {
                         {student.course_name ?? student.course?.name ?? "—"}
                       </Badge>
                     </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
-                      {formatDate(student.join_date)}
-                    </TableCell>
+                    
                     <TableCell><StatusBadge status={student.status} /></TableCell>
                   </TableRow>
                 ))}
